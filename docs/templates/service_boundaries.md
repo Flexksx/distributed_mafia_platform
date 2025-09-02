@@ -9,6 +9,10 @@
 * **Other:** other technologies used
 * **Communication pattern:** describe the communication protocols used
 
+### Service Diagram
+
+Paste here a diagram of how the service is structured
+
 ### Schema
 
 describe participating models and their schemas e.g.
