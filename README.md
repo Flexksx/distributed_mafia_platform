@@ -15,7 +15,25 @@
 
 ### Service Diagram
 
-![alt text](assets/user_management_service.png)
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart TD
+ subgraph subGraph0["Mafia Application"]
+        B("User Management Service <br> Express.js + TypeScript")
+        A["Client / Other Services"]
+  end
+ subgraph subGraph2["Data Persistence"]
+        D[("PostgreSQL Database")]
+  end
+    A -- HTTP/REST API Call --> B
+    B -- JSON Response --> A
+    B -- Reads/Writes user data (name, email, password) --> D
+    style B fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#bbf,stroke:#333,stroke-width:2px
+```
 
 ### Schema
 
@@ -100,7 +118,7 @@ Body:
 {
     "email": "user@example.com",
     "username": "playerOne",
-    "password": "PlainPassword!",
+    "password": "PlainPassword!", // hash on the server
     "initialDevice": { "fingerprint": "sha256:abcd...", "platform": "web" },
     "initialLocation": { "country": "DE" }
 }
