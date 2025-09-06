@@ -2,15 +2,16 @@
 
 ## User Management Service
 
-* **Core responsibility:** Handle requests regarding user information, where uses can have multiple roles which should be fetched from the Discord channel of FAF Community.
-User data should include the name, the nickname, the student group and the role of the user.
+* **Core responsibility:** Single user profile (email, username, hashed password) + in‑game currency balance.
+* Track simple profiling info: device fingerprints and last known IP/location to discourage duplicate accounts.
+* Keep it minimal; no government/passport style identification.
 
 ### Tech stack
 
-* **Framework/language:** express js with TypeScript because it allows for fast development and the Discord JS library supports a huge variety of features.
-* **Databse:** PostgreSQL because it is easy to set up and has ORMs ready for TS
-* **Other:** other technologies used
-* **Communication pattern:** The server will represent a REST API for internal communication, along with a persisted db connection and will make requests to the Discord APIs through the Discord JS node module that uses `undici` as a HTTP\1.1 client.
+* **Framework/language:** Express.js + TypeScript (fast iteration, typing)
+* **Database:** PostgreSQL (transactions for currency updates)
+* **Other:** Password hashing library (argon2/bcrypt)
+* **Communication pattern:** Internal REST API + direct DB persistence
 
 ### Service Diagram
 
@@ -18,65 +19,121 @@ User data should include the name, the nickname, the student group and the role 
 
 ### Schema
 
-The models used by this service have to correspond with the real world needs of other services that need it.
-Biggest part is the nickname, the name and the role of the user so that they can be handled in different ways.
-Let's describe the schema with a set of interfaces.
+Minimal types only.
 
 ```typescript
 interface User {
-    getId(): string;
-    getName(): string;
-    getNickname(): string;
-    getDiscordRoles(): string[]; 
-    getStudentGroup(): string;
+    id: string;
+    email: string;        // unique
+    username: string;     // unique
+    passwordHash: string; // not exposed
+    currency: number;     // float
+    transactions: CurrencyTransaction[];
+    lastIp?: string;
+    lastCountry?: string;
+    devices: Device[];
+    updatedAt: string;
+    createdAt: string;
+}
+
+enum DevicePlatform {
+    WEB,
+    ANDROID,
+    IOS,
+    DESKTOP
+}
+
+interface Device {
+    id: string;
+    userId: string;
+    fingerprint: string;  // stable hash
+    platform: DevicePlatform;
+    lastSeenAt: string;
+}
+
+enum TransactionType {
+    ADD,
+    SUBTRACT
+}
+
+interface CurrencyTransaction {
+    id: string;
+    userId: string;
+    transactionType: TransactionType; 
+    resultingBalance: number; // after apply
+    createdAt: string;
 }
 ```
 
 ### Endpoints
 
-some boilerplate endpoint description
+Minimal set for MVP.
 
-#### `GET v1/users/{id}` - Retrieve user by Id
+#### `GET v1/users/{id}` – Retrieve user by ID
 
-**Path Params:**
+Returns a user DAO
 
-1. `id: string` - id of the user to be retrieved
+```typescript
+interface UserDao {
+    id: string;
+    email: string;
+    username: string;
+    currency: number;
+    lastCountry?: string;
+    updatedAt: string;
+    createdAt: string;
+}
+```
 
-#### `GET v1/users` - Retrieve all users
+#### `GET v1/users` - List method with optional filters
 
 **Query Params:**
 
-1. `roles: string[]` - list of roles to filter users for
+* `username` - string, query by username
+* `email` - string, query by email
 
-#### `POST v1/users` - Add a user
+#### `POST v1/users` – Create user
 
-**Request Body Schema:**
-
-Might be altered further on
-
-```json
-{
-    name:"johndoe",
-    discord_nickname:"johnybravo"
-}
-```
-
-#### `PUT v1/users/{id}` - Update user data
-
-**Request Body Schema:**
-
-Take as request body a full object of the user to replace its data by the given ID
+Body:
 
 ```json
 {
-    name:""
-    nickname:"",
-    roles:[],
-    student_group:""
+    "email": "user@example.com",
+    "username": "playerOne",
+    "password": "PlainPassword!",
+    "initialDevice": { "fingerprint": "sha256:abcd...", "platform": "web" },
+    "initialLocation": { "country": "DE" }
 }
 ```
+
+Responses: 201 | 409 (email/username in use).
+
+#### `POST v1/users/{id}/devices` – Register device
+
+Body:
+
+```json
+{ "fingerprint": "sha256:abcd...", "platform": "web" }
+```
+
+Same fingerprint updates timestamp.
+
+#### `GET v1/users/{id}/devices` – List devices
+
+Returns array of device metadata.
+
+#### `POST v1/users/{id}/currency` - Add a transaction to the user
+
+Body:
+
+```json
+{ "amount": 500, "reason": "REWARD", "type":"ADD" }
+```
+
+#### `GET v1/users/{id}/currency/transactions` – History
 
 ### Dependencies
 
 * PostgreSQL DB Container
-* Discord API Availability
+* Password hashing lib (argon2/bcrypt)
+* (Optional later) Message broker for events
