@@ -67,35 +67,51 @@ class TaskEvent {
 }
 ```
 
-### Endpoints
+## Endpoints
 `POST v1/tasks/day/start` – Assign tasks for all players
-Body:
+Request
 ```json
 { "day": 12 }
 ```
-Response:
+Response 200
 ```json
 { "day": 12, "assignedTasks": 120 }
 ```
-
+Errors
+```json
+{ "error": { "code": "DAY_ALREADY_STARTED", "message": "Day already processed" } }
+```
 `GET v1/tasks/{userId}` – Retrieve tasks for a player
 Path Params:
-userId: string
-Response:
+- `userId: string (uuid)`
+Response 200
 ```json
 [
   { "id": "uuid", "description": "Visit hospital", "status": "ASSIGNED" }
 ]
 ```
-`POST v1/tasks/{assignmentId}/complete` – Mark task as complete
-Path Params:
-`assignmentId: string`
-Response:
+Errors
 ```json
-{ "status": "COMPLETED", "reward": 50 }
+{ "error": { "code": "NOT_FOUND", "message": "User not found" } }
 ```
 
-### Dependencies
-- Game Service: sends the /day/start signal to begin daily tasks.
-- User Management Service: credits currency to the player after task completion.
-- Optional Shop/Roleplay Services: used to validate item/location/role requirements.
+`POST v1/tasks/{assignmentId}/complete` – Mark task as complete
+
+Headers: `Idempotency-Key: string` (recommended)
+Path Params:
+- `assignmentId: string (uuid)`
+Response 200
+```json
+{ "status": "COMPLETED", "reward": { "currency": 50 } }
+```
+Errors
+```json
+{ "error": { "code": "INVALID_STATE", "message": "Task already completed" } }
+```
+## Dependencies
+- Game Service: sends /day/start signal.
+- User Management Service: credits currency on completion.
+- Optional Shop/Roleplay: validates item/location/role requirements.
+
+## Data ownership:
+This service exclusively manages `task_definitions`, `daily_task_assignments`, and `task_events`. No other service writes to this DB.
