@@ -1,568 +1,106 @@
-# Distributed Applications Labs - Mafia Platform
+# Mafia Platform - Microservices Architecture
 
-## Service Architecture Overview
+## Project Overview
+The Mafia Platform is a distributed application that enables users to play a specialized version of the Mafia game with unique rules. The platform is built using a microservices architecture to ensure scalability, maintainability, and clear separation of concerns.
 
-The Mafia Platform is built using a microservices architecture, with each service encapsulating specific functionality to ensure modularity and independence. The platform enables users to play a game of Mafia with customized rules.
+## Architecture Overview
+The system is designed using microservices architecture where each service is responsible for a specific domain of the application. This approach allows for independent development, deployment, and scaling of services. The services communicate via APIs, enabling loose coupling between components.
 
-### Service Boundaries
+## Service Boundaries
 
-1. **Shop Service (Java)**
-   - Manages in-game currency and item purchases
-   - Controls inventory and item availability
-   - Implements dynamic pricing and daily quantity balancing algorithms
-   - Maintains purchase history and item effects
+### Core Services
+3. **Shop Service** - Manages in-game economy, items, and purchases
+4. **Roleplay Service** - Controls role-specific actions and game events
 
-2. **Roleplay Service (Java)**
-   - Manages player roles and their specific abilities
-   - Processes role-based actions (e.g., Mafia murders, Sheriff investigations)
-   - Records all action attempts for game history
-   - Creates filtered announcements for the Game Service to broadcast
-   - Applies item effects on actions (immunity, protection)
+## Microservices
 
-## Shop Service
+### Shop Service
+**Responsibility**: Manages the in-game economy and item system
 
-### Core responsibility: 
-Handle all in-game economy operations including managing items inventory, processing purchases, and balancing daily item quantities. The service provides a mechanism for players to buy protective items and special abilities using in-game currency.
+**Functionality**:
+- Inventory management for in-game items
+- Purchase processing using in-game currency
+- Dynamic item availability (daily quantity balancing algorithm)
+- Item effects management (e.g., protection attributes)
+- Transaction history tracking
+- Currency management
 
-### Tech stack
-- **Framework/language**: Spring Boot with Java 17 for robust transaction management and strong typing
-- **Database**: PostgreSQL for reliable transaction support and data integrity
-- **Other**: RabbitMQ for event messaging, Redis for caching frequently accessed items
-- **Communication pattern**: REST API endpoints for synchronous operations and RabbitMQ for asynchronous event publishing. Uses Spring Data JPA for database operations.
+**Service Boundaries**:
+- Owns all item-related data and operations
+- Manages economic transactions
+- Controls item availability algorithms
 
-### Shop Service Diagram
+**APIs Exposed**:
+- GET /items - List available items
+- GET /items/{id} - Get item details
+- POST /purchases - Process a purchase
+- GET /inventory/{userId} - View user's inventory
+- GET /balance/{userId} - Check user's currency balance
+- PUT /balance/{userId} - Update user's balance
 
-![alt text](assets/Shop_Service.png)
+### Roleplay Service
+**Responsibility**: Controls game mechanics related to player roles and actions
 
-### Schema
-The models used by the Shop Service represent game items, inventory management, and transaction records:
+**Functionality**:
+- Role assignment and management
+- Processing role-specific actions (e.g., Mafia kills, Sheriff investigations)
+- Checking item effectiveness during actions
+- Recording all action attempts for audit purposes
+- Creating filtered announcements for the Game Service to broadcast
+- Enforcing role-specific rules and constraints
 
-```java
-interface Item {
-    String getId();
-    String getName();
-    String getDescription();
-    int getPrice();
-    int getQuantityAvailable();
-    Effect getEffect();
-    void decreaseQuantity(int amount);
-    boolean isAvailable(int requestedQuantity);
-}
+**Service Boundaries**:
+- Owns all role-related logic and actions
+- Controls the outcome of night/day activities
+- Manages immunity and protection mechanisms
+- Does NOT handle direct user communication
 
-interface Inventory {
-    String getUserId();
-    List<InventoryItem> getItems();
-    void addItem(Item item, int quantity);
-    boolean useItem(String itemId);
-    int getItemCount(String itemId);
-}
+**APIs Exposed**:
+- POST /actions - Perform a role-specific action
+- GET /roles - Get available roles information
+- GET /roles/{userId} - Get a user's role
+- POST /announcements - Create filtered game announcements
+- GET /actions/history - Get action history (admin only)
+- GET /actions/results - Get results of actions for the current phase
 
-interface Transaction {
-    String getId();
-    String getUserId();
-    String getItemId();
-    int getQuantity();
-    int getTotalPrice();
-    LocalDateTime getTimestamp();
-    boolean isSuccessful();
-}
+## Service Communication
 
-interface Effect {
-    String getType(); // PROTECTION, ATTACK, INVESTIGATION
-    int getValue();
-    int getDuration();
-}
-```
+### Inter-Service Dependencies
+- **Shop Service** → **User Service**: To validate user identity and update currency
+- **Shop Service** → **Game Service**: To sync with game state and phases
+- **Roleplay Service** → **Shop Service**: To check for items that affect actions
+- **Roleplay Service** → **Game Service**: To provide announcements and game state updates
+- **Game Service** → **Roleplay Service**: To trigger role-based actions at appropriate phases
 
-### Endpoints
-
-#### GET /api/shop/items - Retrieve all available shop items
-
-**Response:**
-```json
-{
-  "items": [
-    {
-      "id": "garlic-123",
-      "name": "Garlic",
-      "description": "Protects against vampire attacks",
-      "price": 50,
-      "quantity_available": 10,
-      "effect": {
-        "type": "PROTECTION",
-        "value": 100,
-        "duration": 1
-      }
-    }
-  ]
-}
-```
-
-#### GET /api/shop/items/{id} - Retrieve specific item details
-**Path Params:**
-- id: string - ID of the item to retrieve
-
-**Response:**
-Item object as shown above
-
-#### POST /api/shop/purchase - Purchase items
-**Request Body Schema:**
-```json
-{
-  "userId": "user-456",
-  "itemId": "garlic-123",
-  "quantity": 2
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Purchase successful",
-  "transaction": {
-    "id": "trans-789",
-    "userId": "user-456",
-    "itemId": "garlic-123",
-    "quantity": 2,
-    "totalPrice": 100,
-    "timestamp": "2023-10-25T15:30:45Z"
-  }
-}
-```
-
-#### GET /api/shop/inventory/{userId} - Get user's inventory
-**Path Params:**
-- userId: string - ID of the user whose inventory to retrieve
-
-**Response:**
-```json
-{
-  "userId": "user-456",
-  "items": [
-    {
-      "id": "garlic-123",
-      "name": "Garlic",
-      "quantity": 2,
-      "effects": {
-        "type": "PROTECTION",
-        "value": 100,
-        "duration": 1
-      }
-    }
-  ]
-}
-```
-
-#### POST /api/shop/use-item - Use an item from inventory
-**Request Body Schema:**
-```json
-{
-  "userId": "user-456",
-  "itemId": "garlic-123",
-  "targetId": "user-789" 
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Item used successfully",
-  "effect": {
-    "type": "PROTECTION",
-    "value": 100,
-    "applied_to": "user-789",
-    "expires_at": "2023-10-26T15:30:45Z"
-  }
-}
-```
-
-### Dependencies
-- PostgreSQL Database Container
-- RabbitMQ for event messaging
-- Redis for caching (optional)
-- Game Service for currency validation
-- Roleplay Service for applying item effects
-
-## Roleplay Service
-
-### Core responsibility: 
-Manage game roles and their associated abilities, process role-based actions during day and night cycles, validate action permissions, and create filtered announcements for the Game Service to broadcast.
-
-### Tech stack
-- **Framework/language**: Spring Boot with Java 17 for consistent service implementation
-- **Database**: MongoDB for flexible document structure to handle various role types and action records
-- **Other**: RabbitMQ for event messaging, Redis for caching active roles
-- **Communication pattern**: REST API endpoints for synchronous operations, RabbitMQ for publishing role action events and consuming shop events. Uses Spring Data MongoDB for database operations.
-
-### Roleplay Service Diagram
-
-![alt text](assets/roleplay_service.png)
-
-### Schema
-The models used by the Roleplay Service represent player roles, actions, and game state:
-
-```java
-interface Role {
-    String getId();
-    String getName();
-    List<Ability> getAbilities();
-    boolean canPerformAction(String actionType, GameState gameState);
-    boolean hasImmunity(String attackType);
-}
-
-interface Ability {
-    String getId();
-    String getName();
-    String getActionType();
-    GamePhase getPhase(); // DAY, NIGHT
-    int getCooldown();
-    boolean canTargetSelf();
-    boolean canTargetDead();
-}
-
-interface Action {
-    String getId();
-    String getUserId();
-    String getTargetId();
-    String getActionType();
-    LocalDateTime getTimestamp();
-    GamePhase getPhase();
-    boolean isSuccessful();
-    String getOutcomeMessage();
-    List<String> getEffectsApplied();
-}
-
-interface GameState {
-    String getGameId();
-    GamePhase getCurrentPhase();
-    int getCurrentDay();
-    List<String> getAlivePlayerIds();
-    List<String> getDeadPlayerIds();
-    Map<String, Role> getPlayerRoles();
-}
-
-enum GamePhase {
-    DAY, NIGHT, DISCUSSION, VOTING
-}
-```
-
-### Endpoints
-
-#### POST /api/roleplay/action - Perform a role action
-**Request Body Schema:**
-```json
-{
-  "userId": "player-123",
-  "actionType": "KILL",
-  "targetId": "player-456",
-  "useItems": [
-    {"itemId": "knife-789"}
-  ],
-  "gameId": "game-001"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Action executed successfully",
-  "actionResult": {
-    "actionId": "action-123",
-    "outcome": "TARGET_KILLED",
-    "effectsApplied": ["DEATH"],
-    "announcement": "A player has died during the night."
-  }
-}
-```
-
-#### GET /api/roleplay/role/{userId} - Get player's role
-**Path Params:**
-- userId: string - ID of the player
-
-**Query Params:**
-- gameId: string - ID of the game
-
-**Response:**
-```json
-{
-  "userId": "player-123",
-  "role": "MAFIA",
-  "abilities": [
-    {
-      "id": "ability-kill",
-      "name": "Kill",
-      "actionType": "KILL",
-      "phase": "NIGHT",
-      "cooldown": 0,
-      "canTargetSelf": false,
-      "canTargetDead": false
-    }
-  ],
-  "isAlive": true
-}
-```
-
-#### GET /api/roleplay/history/{gameId} - Get game action history
-**Path Params:**
-- gameId: string - ID of the game
-
-**Response:**
-```json
-{
-  "gameId": "game-001",
-  "actions": [
-    {
-      "actionId": "action-123",
-      "userId": "player-123",
-      "actionType": "KILL",
-      "targetId": "player-456",
-      "outcome": "TARGET_KILLED",
-      "timestamp": "2023-10-25T03:15:22Z",
-      "phase": "NIGHT",
-      "day": 1
-    }
-  ]
-}
-```
-
-#### POST /api/roleplay/game - Create a new game with roles
-**Request Body Schema:**
-```json
-{
-  "gameId": "game-002",
-  "players": [
-    {"userId": "player-123", "role": "MAFIA"},
-    {"userId": "player-456", "role": "CIVILIAN"},
-    {"userId": "player-789", "role": "SHERIFF"}
-  ]
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Game created successfully",
-  "gameState": {
-    "gameId": "game-002",
-    "phase": "NIGHT",
-    "day": 1,
-    "alivePlayers": ["player-123", "player-456", "player-789"],
-    "deadPlayers": []
-  }
-}
-```
-
-#### PUT /api/roleplay/game/{gameId}/phase - Update game phase
-**Path Params:**
-- gameId: string - ID of the game
-
-**Request Body Schema:**
-```json
-{
-  "phase": "DAY",
-  "day": 2
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Game phase updated",
-  "gameState": {
-    "gameId": "game-002",
-    "phase": "DAY",
-    "day": 2,
-    "alivePlayers": ["player-123", "player-456"],
-    "deadPlayers": ["player-789"]
-  }
-}
-```
-
-### Dependencies
-- MongoDB Database Container
-- RabbitMQ for event messaging
-- Redis for caching (optional)
-- Shop Service for item effect application
-- Game Service for game state updates and announcements
+### Communication Patterns
+- RESTful APIs for synchronous requests
+- Message queues for asynchronous events
+- Event-driven architecture for real-time updates
 
 ## Architecture Diagram
 
 ![alt text](assets/architectural_shop_and_roleplay_service.png)
 
-## Technologies and Communication Patterns
+In this diagram:
+- The User Service and Game Service form the core of the platform
+- My assigned Shop Service and Roleplay Service handle specialized functionality
+- Bidirectional arrows indicate the communication between services
+- Each service has its own dedicated database for storage
+- The Game Service coordinates between the Roleplay Service and other components
+- The Shop Service interacts with both the User Service (for authentication and balance) and the Roleplay Service (for item effects)
 
-### Shop Service
-- **Language**: Java
-- **Framework**: Spring Boot
-- **Database**: PostgreSQL
-- **Communication**: REST API, Event-based messaging with RabbitMQ
-- **Justification**: Java with Spring Boot provides robust transaction management necessary for currency operations and inventory control. PostgreSQL offers reliable transaction support and data integrity for financial operations.
+## Implementation Considerations
 
-### Roleplay Service
-- **Language**: Java
-- **Framework**: Spring Boot
-- **Database**: MongoDB
-- **Communication**: REST API, Event-based messaging with RabbitMQ
-- **Justification**: Java is used for consistent development experience across our team's services. MongoDB's document-oriented structure is ideal for storing varied role configurations and action records with different structures based on role types.
+### Shop Service Implementation Notes
+- Implement daily item stock refresh algorithm
+- Track purchase history for audit purposes
+- Provide item effectiveness metadata for Roleplay Service
+- Implement transaction locking to prevent race conditions
 
-### Communication Pattern
-- **Synchronous**: REST APIs for direct service-to-service communication
-- **Asynchronous**: Event-driven architecture using RabbitMQ for notifications and state changes
-- **Justification**: The combination allows for immediate responses when required (synchronous) while enabling loose coupling for event notifications like role action outcomes (asynchronous).
-
-## Communication Contracts
-
-### Shop Service API
-
-#### 1. Get Available Items
-- **Endpoint**: `GET /api/shop/items`
-- **Description**: Retrieves all available items in the shop
-- **Response**:
-```json
-{
-  "items": [
-    {
-      "id": "string",
-      "name": "string",
-      "description": "string",
-      "price": "number",
-      "quantity": "number",
-      "effects": {
-        "type": "string",
-        "value": "number"
-      }
-    }
-  ]
-}
-```
-
-#### 2. Purchase Item
-- **Endpoint**: `POST /api/shop/purchase`
-- **Description**: Purchase an item from the shop
-- **Request**:
-```json
-{
-  "userId": "string",
-  "itemId": "string",
-  "quantity": "number"
-}
-```
-- **Response**:
-```json
-{
-  "success": "boolean",
-  "message": "string",
-  "transaction": {
-    "id": "string",
-    "userId": "string",
-    "itemId": "string",
-    "quantity": "number",
-    "totalPrice": "number",
-    "timestamp": "string"
-  }
-}
-```
-
-#### 3. Get User Inventory
-- **Endpoint**: `GET /api/shop/inventory/{userId}`
-- **Description**: Get a user's inventory of purchased items
-- **Response**:
-```json
-{
-  "userId": "string",
-  "items": [
-    {
-      "id": "string",
-      "name": "string",
-      "quantity": "number",
-      "effects": {
-        "type": "string",
-        "value": "number"
-      }
-    }
-  ]
-}
-```
-
-### Roleplay Service API
-
-#### 1. Perform Role Action
-- **Endpoint**: `POST /api/roleplay/action`
-- **Description**: Perform a role-specific action
-- **Request**:
-```json
-{
-  "userId": "string",
-  "actionType": "string",
-  "targetId": "string",
-  "useItems": [
-    {
-      "itemId": "string"
-    }
-  ]
-}
-```
-- **Response**:
-```json
-{
-  "success": "boolean",
-  "message": "string",
-  "actionResult": {
-    "actionId": "string",
-    "outcome": "string",
-    "effectsApplied": ["string"],
-    "announcement": "string"
-  }
-}
-```
-
-#### 2. Get Player Role
-- **Endpoint**: `GET /api/roleplay/role/{userId}`
-- **Description**: Get a player's assigned role
-- **Response**:
-```json
-{
-  "userId": "string",
-  "role": "string",
-  "abilities": ["string"],
-  "isAlive": "boolean"
-}
-```
-
-#### 3. Get Action History
-- **Endpoint**: `GET /api/roleplay/history/{gameId}`
-- **Description**: Get history of actions for a specific game
-- **Response**:
-```json
-{
-  "gameId": "string",
-  "actions": [
-    {
-      "actionId": "string",
-      "userId": "string",
-      "actionType": "string",
-      "targetId": "string",
-      "outcome": "string",
-      "timestamp": "string"
-    }
-  ]
-}
-```
-
-## Data Management
-
-- Each service maintains its own database to ensure loose coupling
-- Shop Service uses PostgreSQL for transactional integrity on purchases and inventory
-- Roleplay Service uses MongoDB for flexible document structure to accommodate different role types and actions
-- Services communicate through well-defined APIs rather than direct database access
-- Event-based communication ensures eventual consistency across services
-
-## Team Responsibilities
-
-- **Shop Service**: [Ceban Vasile]
-- **Roleplay Service**: [Ceban Vasile]
+### Roleplay Service Implementation Notes
+- Design role-based permission system
+- Create secure action recording mechanism
+- Implement filtering algorithm for public announcements
+- Build immunity and protection validation logic
+- Ensure fairness in randomized outcomes
+- Implement transaction locking to prevent race conditions
