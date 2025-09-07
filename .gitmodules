@@ -1,0 +1,3 @@
+[submodule "mafia_user_management_service"]
+	path = mafia_user_management_service
+	url = git@github.com:Flexksx/mafia_user_management_service.git
