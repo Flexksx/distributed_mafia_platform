@@ -1,0 +1,3 @@
+[submodule "Shop-Service"]
+	path = Shop-Service
+	url = https://github.com/ceban-vasile/Shop-Service.git
