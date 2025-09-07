@@ -1,25 +1,85 @@
-# Mafia Platform - Microservices Architecture
-
-## Project Overview
-The Mafia Platform is a distributed application that enables users to play a specialized version of the Mafia game with unique rules. The platform is built using a microservices architecture to ensure scalability, maintainability, and clear separation of concerns.
-
-## Architecture Overview
-The system is designed using microservices architecture where each service is responsible for a specific domain of the application. This approach allows for independent development, deployment, and scaling of services. The services communicate via APIs, enabling loose coupling between components.
-
 ### Architecture Diagram
 
-![alt text](assets/service.png)
+```mermaid
+graph TD
+    %% Define services
+    Client[Client Application]
+    API[API Gateway]
+    
+    UMS[User Management Service]
+    GS[Game Service]
+    SS[Shop Service]
+    RS[Roleplay Service]
+    EB[Event Bus / Message Broker]
+    
+    %% Define databases
+    UMSDB[(User DB)]
+    GSDB[(Game DB)]
+    SSDB[(Shop DB)]
+    RSDB[(Roleplay DB)]
+    
+    %% Client to Gateway
+    Client --> API
+    
+    %% Gateway to Services
+    API --> UMS
+    API --> GS
+    API --> SS
+    API --> RS
+    
+    %% Service to Database connections
+    UMS --- UMSDB
+    GS --- GSDB
+    SS --- SSDB
+    RS --- RSDB
+    
+    %% Service to Service direct communications (synchronous)
+    UMS <--> GS
+    GS <--> RS
+    SS <--> RS
+    UMS <--> SS
+    
+    %% Service to Event Bus communications (asynchronous)
+    UMS <-.-> EB
+    GS <-.-> EB
+    SS <-.-> EB
+    RS <-.-> EB
+    
+    %% Add styling
+    classDef service fill:#f9f,stroke:#333,stroke-width:2px
+    classDef database fill:#bbf,stroke:#333,stroke-width:2px
+    classDef gateway fill:#ff9,stroke:#333,stroke-width:2px
+    classDef client fill:#fdd,stroke:#333,stroke-width:2px
+    classDef bus fill:#dfd,stroke:#333,stroke-width:2px
+    
+    class UMS,GS,SS,RS service
+    class UMSDB,GSDB,SSDB,RSDB database
+    class API gateway
+    class Client client
+    class EB bus
+    
+    %% Add subgraphs for clarity
+    subgraph "Core Services"
+        UMS
+        GS
+    end
+    
+    subgraph "Our Services"
+        SS
+        RS
+    end
+```
 
 ### Service Communication Patterns
 
 The diagram above illustrates the communication flows between services in our Mafia Platform:
 
-1. **Synchronous Communication (Solid Lines)**
+1. **Synchronous Communication**
    - The Shop Service communicates directly with the User Management Service for account validation and currency operations
    - The Roleplay Service communicates with the Game Service to update game state based on role actions
    - The Shop Service and Roleplay Service have bidirectional communication to handle item effects on actions
 
-2. **Asynchronous Communication (Dotted Lines)**
+2. **Asynchronous Communication**
    - All services publish events to the Event Bus for asynchronous processing
    - The Game Service subscribes to Roleplay Service events to broadcast announcements
    - The Shop Service listens for game state changes to refresh daily items
@@ -29,15 +89,8 @@ The diagram above illustrates the communication flows between services in our Ma
    - No direct cross-service database access is permitted
    - Data consistency is maintained through events and API calls
 
-## Service Boundaries
+## Shop Service
 
-### Core Services
-3. **Shop Service** - Manages in-game economy, items, and purchases
-4. **Roleplay Service** - Controls role-specific actions and game events
-
-## Microservices
-
-### Shop Service
 **Responsibility**: Manages the in-game economy and item system
 
 **Functionality**:
@@ -48,67 +101,86 @@ The diagram above illustrates the communication flows between services in our Ma
 - Transaction history tracking
 - Currency management
 
-**Service Boundaries**:
-- Owns all item-related data and operations
-- Manages economic transactions
-- Controls item availability algorithms
+### Domain Models and Interfaces
 
-**APIs Exposed**:
-- GET /items - List available items
-- GET /items/{id} - Get item details
-- POST /purchases - Process a purchase
-- GET /inventory/{userId} - View user's inventory
-- GET /balance/{userId} - Check user's currency balance
-- PUT /balance/{userId} - Update user's balance
+#### Item
+```typescript
+interface Item {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  effects: ItemEffect[];
+  availableQuantity: number;
+  imageUrl: string;
+  usageInstructions?: string;
+  createdAt: Date;
+}
 
-### Roleplay Service
-**Responsibility**: Controls game mechanics related to player roles and actions
+interface ItemEffect {
+  type: string;  // PROTECTION, ATTACK_BOOST, ROLE_REVEAL, etc.
+  value: number;
+  duration: number;
+  targetRole?: string;
+}
+```
 
-**Functionality**:
-- Role assignment and management
-- Processing role-specific actions (e.g., Mafia kills, Sheriff investigations)
-- Checking item effectiveness during actions
-- Recording all action attempts for audit purposes
-- Creating filtered announcements for the Game Service to broadcast
-- Enforcing role-specific rules and constraints
+#### Inventory
+```typescript
+interface InventoryItem {
+  id: string;
+  userId: string;
+  gameId: string;
+  itemId: string;
+  name: string;
+  quantity: number;
+  used: boolean;
+  acquiredAt: Date;
+  expiresAt?: Date;
+  effects: ActiveItemEffect[];
+}
 
-**Service Boundaries**:
-- Owns all role-related logic and actions
-- Controls the outcome of night/day activities
-- Manages immunity and protection mechanisms
-- Does NOT handle direct user communication
+interface ActiveItemEffect {
+  type: string;
+  value: number;
+  duration: number;
+  active: boolean;
+}
+```
 
-**APIs Exposed**:
-- POST /actions - Perform a role-specific action
-- GET /roles - Get available roles information
-- GET /roles/{userId} - Get a user's role
-- POST /announcements - Create filtered game announcements
-- GET /actions/history - Get action history (admin only)
-- GET /actions/results - Get results of actions for the current phase
+#### Transaction
+```typescript
+interface Transaction {
+  transactionId: string;
+  userId: string;
+  gameId: string;
+  items: PurchasedItem[];
+  totalCost: number;
+  timestamp: Date;
+  status: 'COMPLETED' | 'FAILED' | 'PENDING';
+}
 
-## Data Management Strategy
+interface PurchasedItem {
+  itemId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+```
 
-Our microservices architecture adopts the **Database-per-Service** pattern, where each service owns and manages its dedicated database. This approach ensures:
+#### Balance
+```typescript
+interface Balance {
+  userId: string;
+  gameId: string;
+  balance: number;
+  lastUpdated: Date;
+}
+```
 
-1. **Service Autonomy**: Each service can independently evolve its data schema without affecting other services
-2. **Scalability**: Databases can be scaled according to the specific needs of each service
-3. **Technology Alignment**: Database technology can be selected to best suit each service's data requirements
-4. **Isolation**: Failures or performance issues in one database don't impact other services
-
-### Cross-Service Data Access
-
-Data is never accessed directly across service boundaries. Instead, we employ:
-
-1. **API-Based Access**: Services expose REST endpoints for synchronous data needs
-2. **Event-Driven Updates**: Services publish events when their data changes
-3. **Eventual Consistency**: Services maintain local projections of necessary external data
-4. **Data Duplication**: Critical data may be duplicated across services for performance and availability
-
-## Communication Contract
-
-This section defines the comprehensive API contract for our services, specifying the endpoints, request/response formats, and data types for inter-service communication.
-
-### Shop Service API Contract
+### APIs Exposed
 
 #### 1. Get Available Items
 
@@ -335,7 +407,115 @@ This section defines the comprehensive API contract for our services, specifying
 - 404: User or game not found
 - 500: Server error
 
-### Roleplay Service API Contract
+### Implementation Considerations
+
+- Implement daily item stock refresh algorithm
+- Track purchase history for audit purposes
+- Provide item effectiveness metadata for Roleplay Service
+- Implement transaction locking to prevent race conditions
+
+## Roleplay Service
+
+**Responsibility**: Controls game mechanics related to player roles and actions
+
+**Functionality**:
+- Role assignment and management
+- Processing role-specific actions (e.g., Mafia kills, Sheriff investigations)
+- Checking item effectiveness during actions
+- Recording all action attempts for audit purposes
+- Creating filtered announcements for the Game Service to broadcast
+- Enforcing role-specific rules and constraints
+
+### Domain Models and Interfaces
+
+#### Role
+```typescript
+interface Role {
+  id: string;
+  name: string;
+  alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL';
+  description: string;
+  abilities: Ability[];
+  winCondition: string;
+}
+
+interface Ability {
+  name: string;
+  description: string;
+  usablePhase: 'DAY' | 'NIGHT' | 'BOTH';
+  cooldown: number;
+  targets: number;  // Number of players that can be targeted
+}
+```
+
+#### PlayerRole
+```typescript
+interface PlayerRole {
+  userId: string;
+  gameId: string;
+  roleId: string;
+  roleName: string;
+  alignment: 'TOWN' | 'MAFIA' | 'NEUTRAL';
+  abilities: PlayerAbility[];
+  alive: boolean;
+  protectionStatus: Protection[];
+}
+
+interface PlayerAbility {
+  name: string;
+  description: string;
+  usablePhase: 'DAY' | 'NIGHT' | 'BOTH';
+  cooldown: number;
+  remainingCooldown: number;
+  used: boolean;
+  targets: number;
+}
+
+interface Protection {
+  type: string;
+  source: string;
+  expiresAt: Date;
+}
+```
+
+#### Action
+```typescript
+interface Action {
+  actionId: string;
+  gameId: string;
+  userId: string;
+  roleName: string;
+  actionType: string;
+  targets: string[];
+  usedItems?: string[];
+  gamePhase: 'DAY' | 'NIGHT';
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'BLOCKED';
+  results: ActionResult[];
+  timestamp: Date;
+}
+
+interface ActionResult {
+  targetId: string;
+  outcome: string;
+  visible: boolean;
+  message: string;
+}
+```
+
+#### Announcement
+```typescript
+interface Announcement {
+  announcementId: string;
+  gameId: string;
+  message: string;
+  visibleTo: ('ALL' | 'MAFIA' | 'TOWN' | 'SPECIFIC_ROLE' | 'SPECIFIC_USER')[];
+  targetUsers?: string[];
+  phase: 'DAY' | 'NIGHT';
+  timestamp: Date;
+}
+```
+
+### APIs Exposed
 
 #### 1. Perform Role Action
 
@@ -679,84 +859,3 @@ Beyond REST APIs, services communicate asynchronously via events. Below are the 
   "timestamp": "string (ISO-8601 format)"
 }
 ```
-
-## Implementation Considerations
-
-### Shop Service Implementation Notes
-- Implement daily item stock refresh algorithm
-- Track purchase history for audit purposes
-- Provide item effectiveness metadata for Roleplay Service
-- Implement transaction locking to prevent race conditions
-
-### Roleplay Service Implementation Notes
-- Design role-based permission system
-- Create secure action recording mechanism
-- Implement filtering algorithm for public announcements
-- Build immunity and protection validation logic
-- Ensure fairness in randomized outcomes
-- Implement transaction locking to prevent race conditions
-
-## Development Workflow
-
-### Branch Strategy
-
-Our repository follows a structured branching model:
-
-- **main** - Production-ready code that has been thoroughly tested and approved
-- **development** - Integration branch where features are combined and tested before release
-- **feature/{service-name}/{feature-description}** - For new feature development
-- **bugfix/{service-name}/{issue-number}** - For bug fixes
-- **hotfix/{service-name}/{issue-number}** - For critical production fixes
-- **release/v{major}.{minor}.{patch}** - For release preparation
-
-### GitHub Workflow
-
-#### Protected Branches
-- **main**: Requires 2 approval
-- **development**: Requires 1approval
-
-#### Merging Strategy
-- **Feature to Development**: Squash and merge (clean history)
-- **Development to Main**: Merge commit (preserve history)
-- **Hotfix to Main**: Merge commit, then cherry-pick to development
-
-#### Pull Request Requirements
-1. **Title Format**: `[SERVICE_NAME] Brief description of changes`
-2. **Description Template**:
-   ```
-   ## Description
-   Brief explanation of the changes
-
-   ## Related Issues
-   Fixes #IssueNumber
-
-   ## Type of Change
-   - [ ] New feature
-   - [ ] Bug fix
-   - [ ] Documentation update
-   - [ ] Performance improvement
-   - [ ] Code refactoring
-
-   ## Testing
-   Description of tests performed
-
-   ## Screenshots (if applicable)
-   ```
-3. **Required Approvals**: At least one approval from a different team member
-
-### Versioning
-
-Semantic Versioning:
-- **Major version**: Incompatible API changes
-- **Minor version**: Backwards-compatible functionality
-- **Patch version**: Backwards-compatible bug fixes
-
-Version numbers are managed through git tags and reflected in service configuration.
-
-### Code Review Process
-
-1. Author creates a PR and assigns reviewers
-2. Reviewers provide feedback using GitHub's review feature
-3. Author addresses feedback with new commits
-4. Once approved, the author merges according to the merging strategy
-5. The branch is deleted after successful merge
