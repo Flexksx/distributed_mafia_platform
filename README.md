@@ -6,6 +6,29 @@ The Mafia Platform is a distributed application that enables users to play a spe
 ## Architecture Overview
 The system is designed using microservices architecture where each service is responsible for a specific domain of the application. This approach allows for independent development, deployment, and scaling of services. The services communicate via APIs, enabling loose coupling between components.
 
+### Architecture Diagram
+
+![alt text](assets/service.png)
+
+### Service Communication Patterns
+
+The diagram above illustrates the communication flows between services in our Mafia Platform:
+
+1. **Synchronous Communication (Solid Lines)**
+   - The Shop Service communicates directly with the User Management Service for account validation and currency operations
+   - The Roleplay Service communicates with the Game Service to update game state based on role actions
+   - The Shop Service and Roleplay Service have bidirectional communication to handle item effects on actions
+
+2. **Asynchronous Communication (Dotted Lines)**
+   - All services publish events to the Event Bus for asynchronous processing
+   - The Game Service subscribes to Roleplay Service events to broadcast announcements
+   - The Shop Service listens for game state changes to refresh daily items
+
+3. **Database Isolation**
+   - Each service maintains its own database
+   - No direct cross-service database access is permitted
+   - Data consistency is maintained through events and API calls
+
 ## Service Boundaries
 
 ### Core Services
@@ -690,7 +713,7 @@ Our repository follows a structured branching model:
 
 #### Protected Branches
 - **main**: Requires 2 approval
-- **development**: Requires 1 approval
+- **development**: Requires 1approval
 
 #### Merging Strategy
 - **Feature to Development**: Squash and merge (clean history)
