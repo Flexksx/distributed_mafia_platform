@@ -1,0 +1,4 @@
+[submodule "services/task-service"]
+	path = services/task-service
+	url = git@github.com:XRRRA/task-service.git
+	branch = main
