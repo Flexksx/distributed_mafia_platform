@@ -1,0 +1,4 @@
+[submodule "services/voting-service"]
+	path = services/voting-service
+	url = git@github.com:XRRRA/voting-service.git
+	branch = main
