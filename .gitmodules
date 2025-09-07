@@ -1,3 +1,6 @@
 [submodule "Shop-Service"]
 	path = Shop-Service
 	url = https://github.com/ceban-vasile/Shop-Service.git
+[submodule "Roleplay-Service"]
+	path = Roleplay-Service
+	url = https://github.com/ceban-vasile/Roleplay-Service.git
