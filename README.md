@@ -1,49 +1,101 @@
 # distributed_applications_labs
 
-## Task Service — Service Boundary
-**Responsibility:** Assign daily tasks based on player role/career at day start, track completion, reward currency, and optionally generate rumors.
+## Task Service
 
-**Owns data (encapsulated):**
-- `task_definitions`
-- `daily_task_assignments`
-- `task_events`
+* **Core responsibility:** Assign daily tasks at the start of the day based on each player’s role and career. Track completion of those tasks, reward in-game currency, and optionally generate rumors that influence the game narrative.
 
-**Inputs:**
-- Day start signal (from Game Service)
-- Role/career info (from Game or Roleplay)
-- Optional items/locations (from Shop/Game) for validation
+### Tech stack
 
-**Outputs:**
-- Assigned tasks to players
-- Completion + reward events (to User Management for currency updates)
-- Rumor events (to Communication/Roleplay)
+* **Framework/language:** Java + Spring Boot (strong ecosystem, great support for REST APIs, built-in validation/security features).  
+* **Database:** PostgreSQL (transactional safety for task assignment and reward crediting).  
+* **Other:** Spring Data JPA (ORM), Spring Security (for authentication/authorization), Jackson (JSON serialization).  
+* **Communication pattern:** REST API (JSON over HTTP) between services. Optionally event publishing (e.g., `rumor.created`) to a message broker in future extensions.
 
-**Clients:** Players (view tasks, submit completion), Game Service (triggers day start)
+### Service Diagram
 
-**Non-goals:** Authentication, currency storage, role logic, night actions, chat.
-
-### Interfaces / Communication
-- **Task ↔ Game Service:** Game starts the day; Task returns task assignments.
-- **Task → User Management:** Request currency credit when tasks complete.
-- **Task (optional reads) → Shop / Roleplay:** Validate item or role requirements.
-
-### Architecture Diagram
 ```mermaid
-flowchart LR
-  C[Clients]
-  G[Game Service]
-  T[Task Service]
-  U[User Management]
-  S[Shop Service]
-  R[Roleplay Service]
+flowchart TD
+  subgraph Client
+    P[Players]
+  end
 
-  C -->|view tasks / submit completion| T
-  C -->|auth/profile| U
-  C -->|join/play| G
+  subgraph Game
+    G[Game Service]
+  end
 
-  G -->|/day/start| T
+  subgraph Task
+    T[Task Service <br/> Java + Spring Boot]
+  end
 
-  T -->|reward currency| U
-  T -. optional reads .-> S
-  T -. optional reads .-> R
+  subgraph User
+    U[User Management Service]
+  end
+
+  P -->|View tasks / submit completion| T
+  G -->|Day start signal| T
+  T -->|Reward currency| U
 ```
+### Schema
+```java
+enum TaskStatus {
+    ASSIGNED,
+    COMPLETED,
+    FAILED
+}
+
+class TaskDefinition {
+    UUID id;
+    String role;            // role/career that receives this task
+    String description;     
+    String requirementType; // e.g., VISIT, USE_ITEM, INTERACT
+}
+
+class DailyTaskAssignment {
+    UUID id;
+    UUID userId;
+    UUID taskDefinitionId;
+    TaskStatus status;
+    LocalDateTime createdAt;
+    LocalDateTime completedAt;
+}
+
+class TaskEvent {
+    UUID id;
+    UUID assignmentId;
+    String eventType;   // e.g., COMPLETION, FAILURE, RUMOR
+    LocalDateTime createdAt;
+}
+```
+
+### Endpoints
+`POST v1/tasks/day/start` – Assign tasks for all players
+Body:
+```json
+{ "day": 12 }
+```
+Response:
+```json
+{ "day": 12, "assignedTasks": 120 }
+```
+
+`GET v1/tasks/{userId}` – Retrieve tasks for a player
+Path Params:
+userId: string
+Response:
+```json
+[
+  { "id": "uuid", "description": "Visit hospital", "status": "ASSIGNED" }
+]
+```
+`POST v1/tasks/{assignmentId}/complete` – Mark task as complete
+Path Params:
+`assignmentId: string`
+Response:
+```json
+{ "status": "COMPLETED", "reward": 50 }
+```
+
+### Dependencies
+- Game Service: sends the /day/start signal to begin daily tasks.
+- User Management Service: credits currency to the player after task completion.
+- Optional Shop/Roleplay Services: used to validate item/location/role requirements.
