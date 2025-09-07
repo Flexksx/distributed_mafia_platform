@@ -58,37 +58,59 @@ class VoteResult {
     LocalDateTime createdAt;
 }
 ```
-Endpoints
+## Endpoints
 `POST v1/votes/open` – Start a new voting session
-Body:
+Request
 ```json
-{ "day": 12, "eligiblePlayers": ["uuid1", "uuid2"] }
+{ "day": 12, "eligiblePlayers": ["uuid1", "uuid2"], "eligibleTargets": ["uuid3","uuid4"] }
 ```
-Response:
+Response 200
 ```json
 { "day": 12, "status": "OPEN", "closesAt": "2025-09-07T20:00:00Z" }
 ```
-
+Errors
+```json
+{ "error": { "code": "VOTE_ALREADY_OPEN", "message": "A vote is already active" } }
+```
 `POST v1/votes` – Cast a vote
-Body:
+Headers: `Idempotency-Key: string`
+Request
 ```json
 { "day": 12, "voterId": "uuid1", "targetUserId": "uuid2" }
 ```
-Response:
+Response 200
 ```json
 { "accepted": true, "voteId": "uuid" }
 ```
+Errors
+```json
+{ "error": { "code": "ALREADY_VOTED", "message": "Voter already cast a vote" } }
+```
 `POST v1/votes/close` – Close voting and compute result
-Body:
+Request
 ```json
 { "day": 12 }
 ```
-Response:
+Response 200
 ```json
-{ "day": 12, "exiledUserId": "uuid2", "tieBreakMethod": "RANDOM" }
+{
+  "day": 12,
+  "exiledUserId": "uuid2",
+  "counts": [
+    { "userId": "uuid2", "votes": 5 },
+    { "userId": "uuid3", "votes": 3 }
+  ],
+  "tieBreakMethod": "RANDOM"
+}
 ```
+Errors
+```json
+{ "error": { "code": "NOT_OPEN", "message": "No vote is currently active" } }
+```
+
 ## Dependencies
-- Game Service: triggers the opening and closing of voting sessions; receives final exile result.
-- Clients (Players): cast their votes through the service.
+- Game Service: opens/closes vote windows, receives exile result.
+- Clients (Players): cast votes via this service.
 
-
+## Data ownership:
+This service exclusively manages `vote_windows`, `votes`, and `vote_results`. No other service writes to this DB.
