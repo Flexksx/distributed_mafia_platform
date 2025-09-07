@@ -63,31 +63,599 @@ The system is designed using microservices architecture where each service is re
 - GET /actions/history - Get action history (admin only)
 - GET /actions/results - Get results of actions for the current phase
 
-## Service Communication
+## Data Management Strategy
 
-### Inter-Service Dependencies
-- **Shop Service** → **User Service**: To validate user identity and update currency
-- **Shop Service** → **Game Service**: To sync with game state and phases
-- **Roleplay Service** → **Shop Service**: To check for items that affect actions
-- **Roleplay Service** → **Game Service**: To provide announcements and game state updates
-- **Game Service** → **Roleplay Service**: To trigger role-based actions at appropriate phases
+Our microservices architecture adopts the **Database-per-Service** pattern, where each service owns and manages its dedicated database. This approach ensures:
 
-### Communication Patterns
-- RESTful APIs for synchronous requests
-- Message queues for asynchronous events
-- Event-driven architecture for real-time updates
+1. **Service Autonomy**: Each service can independently evolve its data schema without affecting other services
+2. **Scalability**: Databases can be scaled according to the specific needs of each service
+3. **Technology Alignment**: Database technology can be selected to best suit each service's data requirements
+4. **Isolation**: Failures or performance issues in one database don't impact other services
 
-## Architecture Diagram
+### Cross-Service Data Access
 
-![alt text](assets/architectural_shop_and_roleplay_service.png)
+Data is never accessed directly across service boundaries. Instead, we employ:
 
-In this diagram:
-- The User Service and Game Service form the core of the platform
-- My assigned Shop Service and Roleplay Service handle specialized functionality
-- Bidirectional arrows indicate the communication between services
-- Each service has its own dedicated database for storage
-- The Game Service coordinates between the Roleplay Service and other components
-- The Shop Service interacts with both the User Service (for authentication and balance) and the Roleplay Service (for item effects)
+1. **API-Based Access**: Services expose REST endpoints for synchronous data needs
+2. **Event-Driven Updates**: Services publish events when their data changes
+3. **Eventual Consistency**: Services maintain local projections of necessary external data
+4. **Data Duplication**: Critical data may be duplicated across services for performance and availability
+
+## Communication Contract
+
+This section defines the comprehensive API contract for our services, specifying the endpoints, request/response formats, and data types for inter-service communication.
+
+### Shop Service API Contract
+
+#### 1. Get Available Items
+
+**Endpoint:** `GET /api/v1/items`
+
+**Description:** Retrieves all available items for purchase in the shop.
+
+**Response Format:**
+```json
+{
+  "items": [
+    {
+      "id": "string",
+      "name": "string",
+      "description": "string",
+      "price": 0,
+      "category": "string",
+      "effects": [
+        {
+          "type": "string",
+          "value": 0,
+          "duration": 0
+        }
+      ],
+      "availableQuantity": 0,
+      "imageUrl": "string"
+    }
+  ],
+  "totalItems": 0,
+  "totalPages": 0,
+  "currentPage": 0
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 400: Invalid parameters
+- 500: Server error
+
+#### 2. Get Item Details
+
+**Endpoint:** `GET /api/v1/items/{id}`
+
+**Description:** Retrieves detailed information about a specific item.
+
+**Path Parameters:**
+- `id`: Unique identifier of the item
+
+**Response Format:**
+```json
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "price": 0,
+  "category": "string",
+  "effects": [
+    {
+      "type": "string",
+      "value": 0,
+      "duration": 0,
+      "targetRole": "string"
+    }
+  ],
+  "availableQuantity": 0,
+  "imageUrl": "string",
+  "usageInstructions": "string",
+  "createdAt": "string (ISO-8601 format)"
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: Item not found
+- 500: Server error
+
+#### 3. Process Purchase
+
+**Endpoint:** `POST /api/v1/purchases`
+
+**Description:** Processes a purchase transaction for one or more items.
+
+**Request Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "items": [
+    {
+      "itemId": "string",
+      "quantity": 0
+    }
+  ]
+}
+```
+
+**Response Format:**
+```json
+{
+  "transactionId": "string",
+  "status": "string",
+  "timestamp": "string (ISO-8601 format)",
+  "totalCost": 0,
+  "remainingBalance": 0,
+  "items": [
+    {
+      "itemId": "string",
+      "name": "string",
+      "quantity": 0,
+      "unitPrice": 0,
+      "totalPrice": 0
+    }
+  ],
+  "message": "string"
+}
+```
+
+**Status Codes:**
+- 201: Purchase successful
+- 404: Item not found
+- 500: Server error
+
+#### 4. View User Inventory
+
+**Endpoint:** `GET /api/v1/inventory/{userId}`
+
+**Description:** Retrieves the inventory of items owned by a user.
+
+**Path Parameters:**
+- `userId`: Unique identifier of the user
+
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "items": [
+    {
+      "id": "string",
+      "itemId": "string",
+      "name": "string",
+      "quantity": 0,
+      "used": false,
+      "acquiredAt": "string (ISO-8601 format)",
+      "expiresAt": "string (ISO-8601 format)",
+      "effects": [
+        {
+          "type": "string",
+          "value": 0,
+          "duration": 0,
+          "active": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: User not found or no inventory
+- 500: Server error
+
+#### 5. Check User Balance
+
+**Endpoint:** `GET /api/v1/balance/{userId}`
+
+**Description:** Checks the current game currency balance of a user.
+
+**Path Parameters:**
+- `userId`: Unique identifier of the user
+
+**Query Parameters:**
+- `gameId` (required): The game context for the balance
+
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "balance": 0,
+  "lastUpdated": "string (ISO-8601 format)"
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: User or game not found
+- 500: Server error
+
+#### 6. Update User Balance
+
+**Endpoint:** `PUT /api/v1/balance/{userId}`
+
+**Description:** Updates the game currency balance of a user.
+
+**Path Parameters:**
+- `userId`: Unique identifier of the user
+
+**Request Format:**
+```json
+{
+  "gameId": "string",
+  "amount": 0,
+  "operation": "ADD|SUBTRACT|SET",
+  "reason": "string"
+}
+```
+
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "previousBalance": 0,
+  "currentBalance": 0,
+  "transactionId": "string",
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: User or game not found
+- 500: Server error
+
+### Roleplay Service API Contract
+
+#### 1. Perform Role Action
+
+**Endpoint:** `POST /api/v1/actions`
+
+**Description:** Executes a role-specific action in the game.
+
+**Request Format:**
+```json
+{
+  "gameId": "string",
+  "userId": "string",
+  "actionType": "string",
+  "targets": ["string"],
+  "usedItems": ["string"],
+  "gamePhase": "DAY|NIGHT",
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+**Response Format:**
+```json
+{
+  "actionId": "string",
+  "status": "PENDING|SUCCESS|FAILED|BLOCKED",
+  "results": [
+    {
+      "targetId": "string",
+      "outcome": "string",
+      "visible": true,
+      "message": "string"
+    }
+  ],
+  "timestamp": "string (ISO-8601 format)",
+  "message": "string"
+}
+```
+
+**Status Codes:**
+- 201: Action submitted
+- 404: User, game, or target not found
+- 500: Server error
+
+#### 2. Get Available Roles
+
+**Endpoint:** `GET /api/v1/roles`
+
+**Description:** Retrieves information about all available roles in the game.
+
+**Response Format:**
+```json
+{
+  "roles": [
+    {
+      "id": "string",
+      "name": "string",
+      "alignment": "TOWN|MAFIA|NEUTRAL",
+      "description": "string",
+      "abilities": [
+        {
+          "name": "string",
+          "description": "string",
+          "usablePhase": "DAY|NIGHT|BOTH",
+          "cooldown": 0,
+          "targets": 0
+        }
+      ],
+      "winCondition": "string"
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 500: Server error
+
+#### 3. Get User Role
+
+**Endpoint:** `GET /api/v1/roles/{userId}`
+
+**Description:** Retrieves the role assigned to a specific user in a game.
+
+**Path Parameters:**
+- `userId`: Unique identifier of the user
+
+**Query Parameters:**
+- `gameId` (required): The game context for the role query
+
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "roleName": "string",
+  "alignment": "TOWN|MAFIA|NEUTRAL",
+  "abilities": [
+    {
+      "name": "string",
+      "description": "string",
+      "usablePhase": "DAY|NIGHT|BOTH",
+      "cooldown": 0,
+      "remainingCooldown": 0,
+      "used": false,
+      "targets": 0
+    }
+  ],
+  "alive": true,
+  "protectionStatus": [
+    {
+      "type": "string",
+      "source": "string",
+      "expiresAt": "string (ISO-8601 format)"
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: User or game not found
+- 500: Server error
+
+#### 4. Create Game Announcement
+
+**Endpoint:** `POST /api/v1/announcements`
+
+**Description:** Creates a filtered game announcement based on game events.
+
+**Request Format:**
+```json
+{
+  "gameId": "string",
+  "eventType": "string",
+  "rawData": {
+    "key1": "value1",
+    "key2": "value2"
+  },
+  "visibleTo": ["ALL|MAFIA|TOWN|SPECIFIC_ROLE|SPECIFIC_USER"],
+  "targetUsers": ["string"],
+  "phase": "DAY|NIGHT",
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+**Response Format:**
+```json
+{
+  "announcementId": "string",
+  "gameId": "string",
+  "message": "string",
+  "visibleTo": ["ALL|MAFIA|TOWN|SPECIFIC_ROLE|SPECIFIC_USER"],
+  "targetUsers": ["string"],
+  "phase": "DAY|NIGHT",
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+**Status Codes:**
+- 201: Announcement created
+- 404: Game not found
+- 500: Server error
+
+#### 5. Get Action History
+
+**Endpoint:** `GET /api/v1/actions/history`
+
+**Description:** Retrieves the history of actions in a game (admin only).
+
+**Query Parameters:**
+- `gameId` (required): The game context for the action history
+
+**Response Format:**
+```json
+{
+  "actions": [
+    {
+      "actionId": "string",
+      "gameId": "string",
+      "userId": "string",
+      "roleName": "string",
+      "actionType": "string",
+      "targets": ["string"],
+      "usedItems": ["string"],
+      "gamePhase": "DAY|NIGHT",
+      "status": "PENDING|SUCCESS|FAILED|BLOCKED",
+      "results": [
+        {
+          "targetId": "string",
+          "outcome": "string",
+          "visible": true,
+          "message": "string"
+        }
+      ],
+      "timestamp": "string (ISO-8601 format)"
+    }
+  ],
+  "totalActions": 0,
+  "totalPages": 0,
+  "currentPage": 0
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 403: Unauthorized access
+- 404: Game not found
+- 500: Server error
+
+#### 6. Get Action Results
+
+**Endpoint:** `GET /api/v1/actions/results`
+
+**Description:** Retrieves the results of actions for the current phase.
+
+**Query Parameters:**
+- `gameId` (required): The game context for the action results
+- `userId` (required): The user requesting the results
+- `phase` (required): Game phase (DAY, NIGHT)
+
+**Response Format:**
+```json
+{
+  "gameId": "string",
+  "phase": "DAY|NIGHT",
+  "results": [
+    {
+      "actionType": "string",
+      "actor": "string",
+      "targets": ["string"],
+      "outcome": "string",
+      "message": "string",
+      "timestamp": "string (ISO-8601 format)"
+    }
+  ],
+  "roleSpecificResults": [
+    {
+      "actionType": "string",
+      "actor": "string",
+      "targets": ["string"],
+      "outcome": "string",
+      "message": "string",
+      "visibleTo": ["string"],
+      "timestamp": "string (ISO-8601 format)"
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 403: Unauthorized access
+- 404: Game or user not found
+- 500: Server error
+
+### Inter-Service Event Formats
+
+Beyond REST APIs, services communicate asynchronously via events. Below are the key event formats:
+
+#### Shop Service Events
+
+1. **Item Purchased Event**
+```json
+{
+  "eventType": "ITEM_PURCHASED",
+  "transactionId": "string",
+  "userId": "string",
+  "gameId": "string",
+  "items": [
+    {
+      "itemId": "string",
+      "name": "string",
+      "quantity": 0,
+      "effects": [
+        {
+          "type": "string",
+          "value": 0,
+          "duration": 0,
+          "targetRole": "string"
+        }
+      ]
+    }
+  ],
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+2. **Item Used Event**
+```json
+{
+  "eventType": "ITEM_USED",
+  "userId": "string",
+  "gameId": "string",
+  "itemId": "string",
+  "inventoryItemId": "string",
+  "targetUserId": "string",
+  "effects": [
+    {
+      "type": "string",
+      "value": 0,
+      "duration": 0,
+      "targetRole": "string"
+    }
+  ],
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+#### Roleplay Service Events
+
+1. **Action Completed Event**
+```json
+{
+  "eventType": "ACTION_COMPLETED",
+  "actionId": "string",
+  "gameId": "string",
+  "userId": "string",
+  "roleName": "string",
+  "actionType": "string",
+  "targets": ["string"],
+  "status": "SUCCESS|FAILED|BLOCKED",
+  "publicOutcome": "string",
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+2. **Player Status Changed Event**
+```json
+{
+  "eventType": "PLAYER_STATUS_CHANGED",
+  "userId": "string",
+  "gameId": "string",
+  "alive": true,
+  "statusEffects": [
+    {
+      "type": "string",
+      "source": "string",
+      "expiresAt": "string (ISO-8601 format)"
+    }
+  ],
+  "timestamp": "string (ISO-8601 format)"
+}
+```
 
 ## Implementation Considerations
 
