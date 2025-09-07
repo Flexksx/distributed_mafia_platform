@@ -672,3 +672,68 @@ Beyond REST APIs, services communicate asynchronously via events. Below are the 
 - Build immunity and protection validation logic
 - Ensure fairness in randomized outcomes
 - Implement transaction locking to prevent race conditions
+
+## Development Workflow
+
+### Branch Strategy
+
+Our repository follows a structured branching model:
+
+- **main** - Production-ready code that has been thoroughly tested and approved
+- **development** - Integration branch where features are combined and tested before release
+- **feature/{service-name}/{feature-description}** - For new feature development
+- **bugfix/{service-name}/{issue-number}** - For bug fixes
+- **hotfix/{service-name}/{issue-number}** - For critical production fixes
+- **release/v{major}.{minor}.{patch}** - For release preparation
+
+### GitHub Workflow
+
+#### Protected Branches
+- **main**: Requires 2 approval
+- **development**: Requires 1 approval
+
+#### Merging Strategy
+- **Feature to Development**: Squash and merge (clean history)
+- **Development to Main**: Merge commit (preserve history)
+- **Hotfix to Main**: Merge commit, then cherry-pick to development
+
+#### Pull Request Requirements
+1. **Title Format**: `[SERVICE_NAME] Brief description of changes`
+2. **Description Template**:
+   ```
+   ## Description
+   Brief explanation of the changes
+
+   ## Related Issues
+   Fixes #IssueNumber
+
+   ## Type of Change
+   - [ ] New feature
+   - [ ] Bug fix
+   - [ ] Documentation update
+   - [ ] Performance improvement
+   - [ ] Code refactoring
+
+   ## Testing
+   Description of tests performed
+
+   ## Screenshots (if applicable)
+   ```
+3. **Required Approvals**: At least one approval from a different team member
+
+### Versioning
+
+Semantic Versioning:
+- **Major version**: Incompatible API changes
+- **Minor version**: Backwards-compatible functionality
+- **Patch version**: Backwards-compatible bug fixes
+
+Version numbers are managed through git tags and reflected in service configuration.
+
+### Code Review Process
+
+1. Author creates a PR and assigns reviewers
+2. Reviewers provide feedback using GitHub's review feature
+3. Author addresses feedback with new commits
+4. Once approved, the author merges according to the merging strategy
+5. The branch is deleted after successful merge
