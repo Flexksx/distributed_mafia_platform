@@ -1,17 +1,25 @@
+[submodule "services/task-service"]
+	path = services/task-service
+	url = git@github.com:XRRRA/task-service.git
+[submodule "Shop-Service"]
+	path = Shop-Service
+	url = https://github.com/ceban-vasile/Shop-Service.git
+[submodule "Roleplay-Service"]
+	path = Roleplay-Service
+	url = https://github.com/ceban-vasile/Roleplay-Service.git
 [submodule "services/voting-service"]
 	path = services/voting-service
 	url = git@github.com:XRRRA/voting-service.git
-	branch = main
 [submodule "mafia_user_management_service"]
 	path = mafia_user_management_service
 	url = git@github.com:Flexksx/mafia_user_management_service.git
 [submodule "mafia_game_service"]
 	path = mafia_game_service
 	url = git@github.com:Flexksx/mafia_game_service.git
-
 [submodule "communication_service"]
 	path = communication_service
 	url = https://github.com/VladNoMore/Communication-Service
 [submodule "rumors-service"]
 	path = rumors-service
 	url = https://github.com/VladNoMore/Rumors-Service
+
