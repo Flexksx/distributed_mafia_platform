@@ -1,0 +1,11 @@
+[submodule "services/voting-service"]
+	path = services/voting-service
+	url = git@github.com:XRRRA/voting-service.git
+	branch = main
+[submodule "mafia_user_management_service"]
+	path = mafia_user_management_service
+	url = git@github.com:Flexksx/mafia_user_management_service.git
+[submodule "mafia_game_service"]
+	path = mafia_game_service
+	url = git@github.com:Flexksx/mafia_game_service.git
+
