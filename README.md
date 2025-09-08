@@ -1,94 +1,3 @@
-### Architecture Diagram
-
-```mermaid
-graph TD
-    %% Define services
-    Client[Client Application]
-    API[API Gateway]
-    
-    UMS[User Management Service]
-    GS[Game Service]
-    SS[Shop Service]
-    RS[Roleplay Service]
-    EB[Event Bus / Message Broker]
-    
-    %% Define databases
-    UMSDB[(User DB)]
-    GSDB[(Game DB)]
-    SSDB[(Shop DB)]
-    RSDB[(Roleplay DB)]
-    
-    %% Client to Gateway
-    Client --> API
-    
-    %% Gateway to Services
-    API --> UMS
-    API --> GS
-    API --> SS
-    API --> RS
-    
-    %% Service to Database connections
-    UMS --- UMSDB
-    GS --- GSDB
-    SS --- SSDB
-    RS --- RSDB
-    
-    %% Service to Service direct communications (synchronous)
-    UMS <--> GS
-    GS <--> RS
-    SS <--> RS
-    UMS <--> SS
-    
-    %% Service to Event Bus communications (asynchronous)
-    UMS <-.-> EB
-    GS <-.-> EB
-    SS <-.-> EB
-    RS <-.-> EB
-    
-    %% Add styling
-    classDef service fill:#f9f,stroke:#333,stroke-width:2px
-    classDef database fill:#bbf,stroke:#333,stroke-width:2px
-    classDef gateway fill:#ff9,stroke:#333,stroke-width:2px
-    classDef client fill:#fdd,stroke:#333,stroke-width:2px
-    classDef bus fill:#dfd,stroke:#333,stroke-width:2px
-    
-    class UMS,GS,SS,RS service
-    class UMSDB,GSDB,SSDB,RSDB database
-    class API gateway
-    class Client client
-    class EB bus
-    
-    %% Add subgraphs for clarity
-    subgraph "Core Services"
-        UMS
-        GS
-    end
-    
-    subgraph "Our Services"
-        SS
-        RS
-    end
-```
-
-### Service Communication Patterns
-
-The diagram above illustrates the communication flows between services in our Mafia Platform:
-
-1. **Synchronous Communication**
-   - The Shop Service communicates directly with the User Management Service for account validation and currency operations
-   - The Roleplay Service communicates with the Game Service to update game state based on role actions
-   - The Shop Service and Roleplay Service have bidirectional communication to handle item effects on actions
-
-2. **Asynchronous Communication**
-   - All services publish events to the Event Bus for asynchronous processing
-   - The Game Service subscribes to Roleplay Service events to broadcast announcements
-   - The Shop Service listens for game state changes to refresh daily items
-
-3. **Database Isolation**
-   - Each service maintains its own database
-   - No direct cross-service database access is permitted
-   - Data consistency is maintained through events and API calls
-
 ## Shop Service
 
 **Responsibility**: Manages the in-game economy and item system
@@ -100,6 +9,26 @@ The diagram above illustrates the communication flows between services in our Ma
 - Item effects management (e.g., protection attributes)
 - Transaction history tracking
 - Currency management
+
+### Service Diagram
+
+```mermaid
+flowchart LR
+    subgraph MafiaApplication["Mafia Application"]
+        SS[("Shop Service
+        Java + Spring Boot")]
+    end
+
+    subgraph DataPersistence["Data Persistence"]
+        DB[(PostgreSQL Database)]
+    end
+
+    Client["Client / Other Services"]
+
+    Client -- "HTTP/REST API Call" --> SS
+    SS -- "JSON Response" --> Client
+    SS -- "Reads/Writes item, inventory, transaction, balance data" --> DB
+```
 
 ### Domain Models and Interfaces
 
@@ -425,6 +354,27 @@ interface Balance {
 - Recording all action attempts for audit purposes
 - Creating filtered announcements for the Game Service to broadcast
 - Enforcing role-specific rules and constraints
+
+### Service diagram
+
+```mermaid
+flowchart LR
+    subgraph MafiaApplication["Mafia Application"]
+        RS[("Roleplay Service
+        Java + Spring Boot")]
+    end
+
+    subgraph DataPersistence["Data Persistence"]
+        DB[(PostgreSQL Database)]
+    end
+
+    Client["Client / Other Services"]
+
+    Client -- "HTTP/REST API Call" --> RS
+    RS -- "JSON Response" --> Client
+    RS -- "Reads/Writes roles, actions, announcements, player status" --> DB
+
+```
 
 ### Domain Models and Interfaces
 
