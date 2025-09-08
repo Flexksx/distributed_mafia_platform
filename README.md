@@ -288,7 +288,197 @@ Errors: 409 (lobby full or already joined).
 ### Dependencies
 
 * PostgreSQL DB container
-
 * Express.js + TypeScript runtime
-
 * (Optional later) Message broker for real-time announcements (e.g. Kafka, RabbitMQ, or WebSocket layer)
+
+## Rumors Service
+
+* **Core responsibility:** Currency-based information marketplace allowing players to purchase intelligence about other players based on their tasks and appearance data. Track information availability by role restrictions and generate rumors from Task Service and Character Service data.
+
+### Tech stack
+
+* **Framework/language:** Java + Spring Boot (enterprise-grade reliability for financial transactions, strong typing for currency operations, third language requirement)
+* **Database:** MongoDB (flexible document storage for varied rumor data structures, easy schema evolution)
+* **Other:** Redis for caching expensive rumor generation, JWT for authentication
+* **Communication pattern:** REST API with other services, async processing for rumor generation
+
+### Service Diagram
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart TD
+ subgraph subGraph0["Mafia Application"]
+        B("Rumors Service <br> Java + Spring Boot")
+        A["Client / Other Services"]
+  end
+ subgraph subGraph2["Data Persistence"]
+        D[("MongoDB Database")]
+        E[("Redis Cache")]
+  end
+    A -- HTTP/REST API Call --> B
+    B -- JSON Response --> A
+    B -- Reads/Writes rumor data --> D
+    B -- Caches rumor generation --> E
+    style B fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#bbf,stroke:#333,stroke-width:2px
+    style E fill:#bbf,stroke:#333,stroke-width:2px
+```
+
+### Schema
+
+```java
+public class Rumor {
+    private String id;
+    private String buyerId;
+    private String targetPlayerId;
+    private String informationType; // "TASK", "APPEARANCE", "INVENTORY"
+    private String content;
+    private Double accuracy; // 0.0 to 1.0
+    private Integer cost;
+    private List<String> availableToRoles;
+    private LocalDateTime purchasedAt;
+}
+
+public class RumorTemplate {
+    private String id;
+    private String template; // "Player {name} was seen {action}"
+    private String sourceService;
+    private List<String> roleRestrictions;
+    private Integer baseCost;
+}
+```
+
+### Endpoints
+
+#### `POST v1/rumors/purchase` – Buy a rumor with currency
+
+Body:
+```json
+{
+    "targetPlayerId": "uuid-of-target",
+    "informationType": "TASK"
+}
+```
+
+#### `GET v1/rumors/available` – Get available rumors for user's role
+
+Returns array of available rumor types for the current user's role.
+
+#### `GET v1/rumors/pricing` – Get current rumor costs
+
+Returns pricing information for different rumor types.
+
+#### `GET v1/rumors/history/{userId}` – Get purchase history
+
+Returns user's rumor purchase history.
+
+### Dependencies
+
+* MongoDB container
+* Redis container  
+* Java Spring Boot runtime
+* Integration with User Management Service (currency deduction)
+* Integration with Task Service (task data)
+* Integration with Character Service (appearance data)
+
+## Communication Service
+
+* **Core responsibility:** Multi-channel chat system with game-state-aware messaging rules. Global chat during voting hours, private Mafia channels, location-based messaging.
+
+### Tech stack
+
+* **Framework/language:** Java + Spring Boot (consistent with Rumors Service, WebSocket support, enterprise reliability for real-time messaging)
+* **Database:** PostgreSQL (ACID compliance for chat history, consistent with other services)
+* **Other:** WebSocket for real-time messaging, Redis pub/sub for message broadcasting
+* **Communication pattern:** REST + WebSocket APIs, event-driven messaging
+
+### Service Diagram
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart TD
+ subgraph subGraph0["Mafia Application"]
+        B("Communication Service <br> Java + Spring Boot")
+        A["Client / Other Services"]
+  end
+ subgraph subGraph2["Data Persistence"]
+        D[("PostgreSQL Database")]
+        E[("Redis Pub/Sub")]
+  end
+    A -- HTTP/REST + WebSocket --> B
+    B -- Real-time Messages --> A
+    B -- Reads/Writes chat data --> D
+    B -- Message broadcasting --> E
+    style B fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#bbf,stroke:#333,stroke-width:2px
+    style E fill:#bbf,stroke:#333,stroke-width:2px
+```
+
+### Schema
+
+```java
+public class ChatMessage {
+    private String id;
+    private String senderId;
+    private String channelId;
+    private String content;
+    private String type; // "GLOBAL", "MAFIA", "LOCATION"
+    private LocalDateTime timestamp;
+}
+
+public class ChatChannel {
+    private String id;
+    private String type;
+    private String name;
+    private String locationId; // optional for location-based chats
+    private List<String> participants;
+    private Boolean isActive;
+}
+```
+
+### Endpoints
+
+#### `POST v1/chat/global/messages` – Send global message (voting hours only)
+
+Body:
+```json
+{
+    "content": "I think player X is suspicious"
+}
+```
+
+#### `GET v1/chat/global/messages` – Get global chat history
+
+Returns array of global chat messages.
+
+#### `POST v1/chat/mafia/messages` – Send Mafia private message
+
+Body:
+```json
+{
+    "content": "Let's target player Y tonight"
+}
+```
+
+#### `GET v1/chat/channels/{channelId}/messages` – Get channel messages
+
+Returns messages for specific channel.
+
+#### `WS v1/chat/ws` – WebSocket connection for real-time messaging
+
+WebSocket endpoint for real-time message delivery.
+
+### Dependencies
+
+* PostgreSQL DB container
+* Redis container
+* Java Spring Boot runtime
+* WebSocket support
+* Integration with Game Service (voting hours, game state)
+* Integration with User Management Service (user roles, authentication)
