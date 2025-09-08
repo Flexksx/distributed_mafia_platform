@@ -1477,7 +1477,404 @@ X-RateLimit-Window: 3600
 - **Idempotency**: All POST/PUT operations support idempotency keys
 - **Transactional**: Critical operations wrapped in distributed transactions where needed
 
-## Data Ownership:
-- **Town Service** exclusively manages: `locations`, `player_movements`, `location_activities`, `occupancy_data`
-- **Character Service** exclusively manages: `characters`, `assets`, `inventory_items`, `customization_slots`, `character_effects`
-- **Shared Concepts** (accessed via APIs only): User authentication, game instances, cross-service validations
+---
+
+## GitHub Workflow and Contribution Guidelines
+
+### Repository Structure and Branch Strategy
+
+#### Branch Hierarchy
+```
+main (production-ready)
+├── development (integration branch)
+├── feature/town-service-movement-tracking
+├── feature/character-service-inventory-system
+├── hotfix/security-patch-auth
+├── release/v1.2.0
+└── bugfix/location-capacity-validation
+```
+
+#### Branch Naming Conventions
+All branch names must follow the pattern: `<type>/<scope>-<description>`
+
+**Branch Types**:
+- `feature/` - New functionality development
+- `bugfix/` - Bug fixes for existing features
+- `hotfix/` - Critical production fixes
+- `release/` - Release preparation branches
+- `experiment/` - Proof of concepts and experiments
+- `refactor/` - Code refactoring without functionality changes
+
+**Examples**:
+- `feature/town-service-websocket-integration`
+- `bugfix/character-inventory-sync-issue`
+- `hotfix/jwt-token-validation-vulnerability`
+- `release/v2.0.0-mafia-platform-launch`
+
+#### Branch Protection Rules
+
+##### Main Branch Protection
+- **Required Reviews**: Minimum 2 approvals from code owners
+- **Dismiss Stale Reviews**: Enabled - new commits dismiss previous approvals
+- **Require Review from Code Owners**: Enabled
+- **Restrict Pushes**: Only admins can push directly (emergency only)
+- **Require Status Checks**: All CI/CD pipelines must pass
+- **Require Branches to be Up to Date**: Enabled
+- **Include Administrators**: Protection rules apply to admins
+
+##### Development Branch Protection  
+- **Required Reviews**: Minimum 1 approval from team member
+- **Dismiss Stale Reviews**: Enabled
+- **Require Status Checks**: All automated tests must pass
+- **Allow Force Pushes**: Disabled
+- **Allow Deletions**: Disabled
+
+### Code Owners Configuration
+
+**CODEOWNERS file structure**:
+```gitignore
+# Global ownership
+* @mafia-platform-team
+
+# Service-specific ownership
+/town-service/ @town-service-team @lead-developer
+/character-service/ @character-service-team @lead-developer
+
+# Infrastructure and configuration
+/.github/ @devops-team @lead-developer
+/docker/ @devops-team
+/kubernetes/ @devops-team
+
+# Documentation
+/docs/ @tech-writer @lead-developer
+README.md @lead-developer
+
+# Database migrations
+/migrations/ @database-team @lead-developer
+
+# Security-related files
+/security/ @security-team @lead-developer
+```
+
+### Pull Request (PR) Guidelines
+
+#### PR Title Format
+```
+<type>(scope): <description>
+
+Examples:
+feat(town-service): add real-time location tracking with WebSockets
+fix(character-service): resolve inventory synchronization deadlock
+docs(readme): update API documentation for v1.2.0
+refactor(town-service): optimize database queries for movement history
+```
+
+#### PR Description Template
+All PRs must use this template:
+
+```markdown
+## 🎯 Purpose
+Brief description of what this PR accomplishes and why it's needed.
+
+## 🔄 Type of Change
+- [ ] Bug fix (non-breaking change that fixes an issue)
+- [ ] New feature (non-breaking change that adds functionality)
+- [ ] Breaking change (fix or feature that causes existing functionality to not work as expected)
+- [ ] Documentation update
+- [ ] Performance improvement
+- [ ] Code refactoring
+- [ ] Security enhancement
+
+## 🧪 Testing
+- [ ] Unit tests added/updated and passing
+- [ ] Integration tests added/updated and passing
+- [ ] E2E tests added/updated and passing
+- [ ] Manual testing completed
+- [ ] Performance testing completed (if applicable)
+
+### Test Coverage
+- Current coverage: __%
+- Coverage change: +/- __%
+- Minimum required: 80%
+
+## 📝 Changes Made
+Detailed list of changes:
+- 
+- 
+- 
+
+## 🔗 Related Issues
+Closes #123
+Relates to #456
+
+## 📸 Screenshots/Videos (if applicable)
+Include any relevant screenshots or GIFs demonstrating the changes.
+
+## 🚀 Deployment Notes
+Any special deployment considerations:
+- Database migrations required: [ ] Yes [ ] No
+- Configuration changes needed: [ ] Yes [ ] No
+- Environment variables added/changed: [ ] Yes [ ] No
+- Dependencies added/updated: [ ] Yes [ ] No
+
+## ✅ Checklist
+- [ ] Code follows project style guidelines
+- [ ] Self-review of code completed
+- [ ] Code is properly commented, particularly complex areas
+- [ ] Documentation updated (if applicable)
+- [ ] No new warnings introduced
+- [ ] Tests added that prove the fix is effective or feature works
+- [ ] New and existing unit tests pass locally
+- [ ] Any dependent changes merged and published
+- [ ] Security considerations reviewed
+- [ ] Performance impact assessed
+```
+
+#### PR Review Requirements
+
+**Reviewer Responsibilities**:
+- **Code Quality**: Check for clean, readable, maintainable code
+- **Security**: Verify no security vulnerabilities introduced
+- **Performance**: Assess potential performance impacts
+- **Testing**: Ensure adequate test coverage and quality
+- **Documentation**: Verify documentation is updated
+- **Business Logic**: Confirm changes align with Mafia Platform requirements
+
+**Review Process**:
+1. **Automated Checks** - All CI/CD pipelines must pass
+2. **Code Owner Review** - Domain expert approval required
+3. **Security Review** - For changes affecting authentication, data handling
+4. **Performance Review** - For changes affecting database queries, API response times
+5. **Final Approval** - Team lead or senior developer final sign-off
+
+### Merging Strategy
+
+#### Merge Types Allowed
+- **Squash and Merge**: Default for feature branches (keeps clean history)
+- **Rebase and Merge**: For small bug fixes and documentation updates
+- **Create Merge Commit**: Only for release branches and critical hotfixes
+
+#### Merge Requirements
+Before merging to `main`:
+```yaml
+required_checks:
+  - continuous-integration/github-actions/build
+  - continuous-integration/github-actions/test
+  - continuous-integration/github-actions/security-scan
+  - continuous-integration/github-actions/performance-test
+  - coverage/codecov
+  - code-quality/sonarqube
+```
+
+### Continuous Integration/Continuous Deployment (CI/CD)
+
+#### GitHub Actions Workflows
+
+**1. Build and Test Workflow** (`.github/workflows/build-test.yml`)
+```yaml
+name: Build and Test
+on:
+  pull_request:
+    branches: [main, development]
+  push:
+    branches: [main, development]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [town-service, character-service]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Run tests
+        run: |
+          cd ${{ matrix.service }}
+          ./gradlew test jacocoTestReport
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ${{ matrix.service }}/build/reports/jacoco/test/jacocoTestReport.xml
+```
+
+**2. Security Scan Workflow** (`.github/workflows/security.yml`)
+```yaml
+name: Security Scan
+on:
+  pull_request:
+    branches: [main, development]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Snyk security scan
+        uses: snyk/actions/gradle@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Run OWASP Dependency Check
+        run: |
+          ./gradlew dependencyCheckAnalyze
+```
+
+### Code Quality Standards
+
+#### Test Coverage Requirements
+- **Minimum Coverage**: 80% for all services
+- **Critical Path Coverage**: 95% for security and financial operations
+- **New Code Coverage**: 90% for all new features
+- **Coverage Types**: Unit, Integration, E2E tests required
+
+#### Code Quality Metrics
+- **SonarQube Quality Gate**: Must pass
+- **Code Smells**: Maximum 10 per service
+- **Technical Debt**: Less than 1 hour per service
+- **Duplicated Lines**: Less than 3%
+- **Maintainability Rating**: A or B required
+
+#### Static Analysis Rules
+- **Checkstyle**: Google Java Style Guide
+- **PMD**: Security and performance rules enabled
+- **SpotBugs**: All bug categories enabled
+- **SonarLint**: Integrated in IDEs for real-time feedback
+
+### Versioning Strategy
+
+#### Semantic Versioning (SemVer)
+Format: `MAJOR.MINOR.PATCH`
+
+- **MAJOR**: Breaking changes that require API updates
+- **MINOR**: New features that are backward compatible
+- **PATCH**: Bug fixes and minor improvements
+
+#### Version Tagging
+```bash
+# Release tags
+v1.0.0 - Initial Mafia Platform release
+v1.1.0 - Added character customization features
+v1.1.1 - Fixed inventory synchronization bug
+v2.0.0 - Breaking: New authentication system
+
+# Pre-release tags
+v1.2.0-alpha.1 - Alpha release for testing
+v1.2.0-beta.1 - Beta release for user testing
+v1.2.0-rc.1 - Release candidate
+```
+
+#### Release Process
+1. **Development** → `development` branch
+2. **Feature Complete** → Create `release/v1.x.0` branch
+3. **Testing & Bug Fixes** → Commits to release branch
+4. **Ready for Production** → Merge to `main` + tag version
+5. **Hotfixes** → `hotfix/` branch → merge to `main` and `development`
+
+### Development Environment Setup
+
+#### Required Tools
+```json
+{
+  "java": "17+",
+  "gradle": "8.0+",
+  "docker": "24.0+",
+  "kubectl": "1.28+",
+  "git": "2.40+",
+  "ide": "IntelliJ IDEA / VSCode"
+}
+```
+
+#### Pre-commit Hooks
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-yaml
+  
+  - repo: https://github.com/checkstyle/checkstyle
+    rev: checkstyle-10.12.3
+    hooks:
+      - id: checkstyle
+        args: ['-c', 'google_checks.xml']
+```
+
+### Issue Management and Project Tracking
+
+#### Issue Labels
+```yaml
+Priority:
+  - priority/critical 🔥
+  - priority/high 🟠
+  - priority/medium 🟡
+  - priority/low 🟢
+
+Type:
+  - type/bug 🐛
+  - type/feature ✨
+  - type/documentation 📚
+  - type/security 🔒
+  - type/performance ⚡
+
+Status:
+  - status/triage 🔍
+  - status/in-progress 🚧
+  - status/review 👀
+  - status/blocked 🚫
+
+Service:
+  - service/town-service 🏢
+  - service/character-service 👤
+  - service/infrastructure 🛠️
+```
+
+#### Milestone Planning
+- **Sprint Duration**: 2 weeks
+- **Release Cycle**: Monthly minor releases
+- **Hotfix Cycle**: As needed (within 24 hours for critical issues)
+
+### Security and Compliance
+
+#### Secret Management
+- **GitHub Secrets**: Used for API keys, tokens
+- **Environment Variables**: Never committed to repository
+- **Dependency Scanning**: Automated vulnerability detection
+- **SAST/DAST**: Static and dynamic security analysis
+
+#### Compliance Checklist
+- [ ] No secrets in code or commit history
+- [ ] All dependencies regularly updated
+- [ ] Security headers implemented
+- [ ] Input validation on all endpoints
+- [ ] SQL injection prevention
+- [ ] XSS protection enabled
+- [ ] CSRF tokens implemented
+- [ ] Rate limiting configured
+
+### Monitoring and Observability
+
+#### Metrics Tracking
+```yaml
+Application Metrics:
+  - Request/Response times
+  - Error rates by endpoint
+  - Database query performance
+  - Cache hit/miss ratios
+  - Memory and CPU usage
+
+Business Metrics:
+  - Player movement frequency
+  - Character customization rates
+  - Location popularity
+  - Peak concurrency levels
+```
+
+This comprehensive GitHub workflow ensures high-quality, secure, and maintainable code for the Mafia Platform while enabling efficient collaboration among team members.
