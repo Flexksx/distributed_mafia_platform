@@ -95,6 +95,118 @@ graph LR
 
 ---
 
+## Technologies and Communication Patterns
+
+### Team Language Distribution
+Our team implements services using **3 different programming languages** to leverage the strengths of each technology stack:
+
+- **Java + Spring Boot**: Town Service, Character Service (our implementation)
+- **Python + FastAPI**: Shop Service (team member implementation)
+- **Node.js + Express**: User Management Service (team member implementation)
+
+### Service Technologies
+
+#### Town Service
+- **Language**: Java 17
+- **Framework**: Spring Boot 3.2 with Spring WebFlux
+- **Database**: PostgreSQL 15 with spatial extensions
+- **Caching**: Redis for location state caching
+- **Additional Libraries**: 
+  - Spring Data JPA for database operations
+  - Spring WebSocket for real-time movement tracking
+  - Jackson for JSON serialization
+  - Micrometer for metrics
+
+**Technology Justification for Mafia Platform Business Case**:
+- **Concurrency Excellence**: Java's virtual threads (Project Loom) and Spring WebFlux enable handling thousands of simultaneous player movements without performance degradation - critical for a multiplayer mafia game where real-time location tracking is essential
+- **Enterprise Reliability**: Spring Boot's production-ready features (health checks, metrics, security) ensure the Town Service can handle the high-stakes nature of mafia gameplay where system downtime could disrupt active games
+- **Spatial Data Processing**: PostgreSQL's PostGIS extension combined with Java's robust geospatial libraries enable complex location-based queries needed for territory control and proximity-based game mechanics
+- **Transaction Safety**: Java's strong typing and Spring's transaction management ensure movement logs are never corrupted, maintaining game integrity for investigations and alibis
+- **Ecosystem Maturity**: Extensive security libraries available for implementing the secretive, authenticated nature of mafia platform communications
+
+#### Character Service  
+- **Language**: Java 17
+- **Framework**: Spring Boot 3.2 with Spring MVC
+- **Database**: PostgreSQL 15 for structured data, Redis for character state caching
+- **Additional Libraries**:
+  - Spring Data JPA with JSON support
+  - Spring Cache abstraction
+  - Bean Validation for data integrity
+  - MapStruct for DTO mapping
+
+**Technology Justification for Mafia Platform Business Case**:
+- **Data Consistency**: Java's strong typing system and Spring's transaction management ensure inventory operations are atomic - when a character purchases disguise items, the transaction either completes entirely or fails entirely, preventing inventory corruption that could compromise gameplay
+- **Complex Object Modeling**: Java's OOP capabilities excel at modeling the intricate character customization system where items have effects, restrictions, and relationships - essential for a mafia game where appearance and equipment directly impact gameplay mechanics
+- **Secure State Management**: Spring Security integration enables role-based character access (family boss vs. street thug) with different customization privileges and inventory restrictions
+- **Performance Optimization**: Redis integration provides sub-millisecond character state retrieval, crucial when multiple services need to validate character abilities during fast-paced mafia operations
+- **JSON Flexibility**: PostgreSQL's JSON support combined with Jackson allows storing flexible character appearance data while maintaining query performance for complex inventory searches
+
+### Communication Patterns
+
+#### Synchronous Communication
+- **REST APIs**: Primary communication method between all services
+  - **Protocol**: HTTP/HTTPS with JSON payloads
+  - **Authentication**: JWT tokens for secure inter-service communication
+  - **Rate Limiting**: Implemented to prevent service abuse during high-intensity mafia operations
+  - **Circuit Breaker**: Hystrix pattern to handle service failures gracefully
+
+**Business Case Alignment**: REST ensures immediate response for critical operations like location access validation and inventory verification during time-sensitive mafia activities.
+
+#### Asynchronous Communication
+- **Event-Driven Architecture**: 
+  - **Technology**: Apache Kafka for event streaming
+  - **Pattern**: Publish-Subscribe for movement events and inventory changes
+  - **Event Store**: Persistent event log for game activity auditing
+- **Message Queuing**: 
+  - **Technology**: RabbitMQ for reliable message delivery
+  - **Use Cases**: Delayed notifications, batch inventory processing, activity reporting to Task Service
+
+**Business Case Alignment**: Async patterns enable the platform to handle the secretive nature of mafia operations - events can be processed without blocking other operations, and the event store provides an immutable audit trail for investigations.
+
+#### Real-Time Communication
+- **WebSockets**: 
+  - **Implementation**: Spring WebSocket with STOMP protocol
+  - **Use Cases**: Live location updates, real-time character appearance changes during meetings
+  - **Fallback**: Server-Sent Events (SSE) for browsers with limited WebSocket support
+
+**Business Case Alignment**: Real-time updates are crucial for mafia gameplay where knowing who's where and what they're wearing can be life-or-death information.
+
+### Trade-offs Analysis
+
+#### Performance vs Complexity
+- **Decision**: Multi-pattern communication (REST + Events + WebSockets)
+- **Trade-off**: Increased system complexity for superior user experience
+- **Business Impact**: Enhanced gameplay immersion justifies the architectural overhead - mafia games require seamless real-time interactions
+
+#### Consistency vs Availability  
+- **Decision**: Strong consistency for inventory, eventual consistency for location tracking
+- **Trade-off**: Some location updates may have slight delays vs guaranteed inventory accuracy
+- **Business Impact**: Financial transactions (shop purchases) require absolute accuracy, while location tracking can tolerate minor delays
+
+#### Java Ecosystem vs Polyglot Architecture
+- **Decision**: Java for both our services despite having Python/Node.js options
+- **Trade-off**: Miss some language-specific benefits vs consistent development experience
+- **Business Impact**: Faster development and easier maintenance outweigh potential performance gains from language optimization
+
+#### Horizontal Scaling Considerations
+- **Stateless Design**: Both services designed to be horizontally scalable
+- **Database Partitioning**: Character data partitioned by game instance, location data by geographical regions
+- **Cache Distribution**: Redis cluster setup for handling high-concurrency character state access
+- **Load Balancing**: Spring Cloud Gateway for intelligent request routing based on user location and character activity patterns
+
+### Security Architecture
+Given the "high-risk, high-reward" nature of the Mafia Platform:
+
+- **End-to-End Encryption**: All inter-service communication encrypted with TLS 1.3
+- **Zero-Trust Model**: Every service call authenticated and authorized
+- **Audit Logging**: Complete activity trails for forensic analysis
+- **Data Anonymization**: Personal data encrypted at rest with rotating keys
+- **Rate Limiting**: Aggressive throttling to prevent reconnaissance attacks on the platform
+
+This technology stack provides the reliability, security, and performance needed for a clandestine gaming platform where system failures or data breaches could have serious consequences for the fictional "organization" and its members.
+
+---
+
 ## Town Service
 * **Core responsibility:** Manages all game world locations and tracks player movement patterns within the town.
 
