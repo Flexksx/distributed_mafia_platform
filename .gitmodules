@@ -1,5 +1,5 @@
 [submodule "services/task-service"]
-	path = services/task-service
+	path = task-service
 	url = git@github.com:XRRRA/task-service.git
 [submodule "Shop-Service"]
 	path = Shop-Service
@@ -8,7 +8,7 @@
 	path = Roleplay-Service
 	url = https://github.com/ceban-vasile/Roleplay-Service.git
 [submodule "services/voting-service"]
-	path = services/voting-service
+	path = voting-service
 	url = git@github.com:XRRRA/voting-service.git
 [submodule "mafia_user_management_service"]
 	path = mafia_user_management_service
@@ -23,3 +23,9 @@
 	path = rumors-service
 	url = https://github.com/VladNoMore/Rumors-Service
 
+[submodule "voting-service"]
+	path = voting-service
+	url = git@github.com:XRRRA/voting-service.git
+[submodule "task-service"]
+	path = task-service
+	url = git@github.com:XRRRA/task-service.git
