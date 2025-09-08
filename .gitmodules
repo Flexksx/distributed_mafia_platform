@@ -16,3 +16,10 @@
 [submodule "mafia_game_service"]
 	path = mafia_game_service
 	url = git@github.com:Flexksx/mafia_game_service.git
+[submodule "communication_service"]
+	path = communication_service
+	url = https://github.com/VladNoMore/Communication-Service
+[submodule "rumors-service"]
+	path = rumors-service
+	url = https://github.com/VladNoMore/Rumors-Service
+
