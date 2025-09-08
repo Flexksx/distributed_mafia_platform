@@ -62,6 +62,37 @@ graph TB
     class Client clientBox
 ```
 
+### Focused Communication: Town ↔ Character Services
+
+```mermaid
+graph LR
+    subgraph "Town Service Domain"
+        TownAPI[Town Service API]
+        LocationDB[(Location DB)]
+    end
+    
+    subgraph "Character Service Domain"
+        CharAPI[Character Service API]
+        CharDB[(Character DB)]
+    end
+    
+    subgraph "Communication Patterns"
+        REST[REST API Calls]
+        Events[Async Events]
+    end
+    
+    TownAPI -->|Location Access Validation| CharAPI
+    CharAPI -->|Item-based Access Check| TownAPI
+    TownAPI -->|Movement Events| Events
+    Events -->|Inventory Updates| CharAPI
+    
+    TownAPI --> LocationDB
+    CharAPI --> CharDB
+    
+    style TownAPI fill:#ff9999
+    style CharAPI fill:#ff9999
+```
+
 ---
 
 ## Town Service
