@@ -1,6 +1,12 @@
 [submodule "services/task-service"]
 	path = services/task-service
 	url = git@github.com:XRRRA/task-service.git
+[submodule "Shop-Service"]
+	path = Shop-Service
+	url = https://github.com/ceban-vasile/Shop-Service.git
+[submodule "Roleplay-Service"]
+	path = Roleplay-Service
+	url = https://github.com/ceban-vasile/Roleplay-Service.git
 [submodule "services/voting-service"]
 	path = services/voting-service
 	url = git@github.com:XRRRA/voting-service.git
