@@ -1,5 +1,69 @@
 # distributed_applications_labs
 
+## Service Boundaries Overview
+
+### Town Service & Character Service Communication Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Client[Game Client]
+    end
+    
+    subgraph "Mafia Platform Services"
+        subgraph "Core Game Services"
+            Game[Game Service<br/>Java + Spring Boot]
+            Task[Task Service<br/>Java + Spring Boot]
+        end
+        
+        subgraph "Domain Services - Our Implementation"
+            Town[Town Service<br/>Java + Spring Boot<br/>Location Management]
+            Character[Character Service<br/>Java + Spring Boot<br/>Character & Inventory]
+        end
+        
+        subgraph "Supporting Services"
+            Shop[Shop Service<br/>Python + FastAPI]
+            User[User Management<br/>Node.js + Express]
+        end
+    end
+    
+    subgraph "Data Layer"
+        DB_Town[(Town Database<br/>PostgreSQL)]
+        DB_Character[(Character Database<br/>PostgreSQL + Redis)]
+    end
+
+    %% Client connections
+    Client --> Game
+    Client --> Town
+    Client --> Character
+    
+    %% Inter-service communication
+    Town --> Task
+    Town --> Character
+    Character --> Shop
+    Character --> User
+    Task --> Character
+    Game --> Town
+    Game --> Character
+    
+    %% Database connections
+    Town --> DB_Town
+    Character --> DB_Character
+    
+    %% Styling
+    classDef ourServices fill:#ff9999,stroke:#333,stroke-width:3px
+    classDef otherServices fill:#cccccc,stroke:#333,stroke-width:1px
+    classDef dbBox fill:#99ccff,stroke:#333,stroke-width:2px
+    classDef clientBox fill:#99ff99,stroke:#333,stroke-width:2px
+    
+    class Town,Character ourServices
+    class Game,Task,Shop,User otherServices
+    class DB_Town,DB_Character dbBox
+    class Client clientBox
+```
+
+---
+
 ## Town Service
 * **Core responsibility:** Manages all game world locations and tracks player movement patterns within the town.
 
@@ -25,7 +89,7 @@ config:
 ---
 flowchart TD
  subgraph subGraph0["Mafia Application"]
-        B("Town Service <br> Node.js + Express.js + TypeScript")
+        B("Town Service <br> Java + Spring Boot")
         A["Client / Game Service / Task Service"]
   end
  subgraph subGraph2["Data Persistence"]
@@ -175,33 +239,31 @@ Response 200:
 - Item effect tracking for gameplay mechanics
 
 ### Tech stack
-* **Framework/language:** Node.js + Express.js + TypeScript (consistent with Town Service)
-* **Database:** PostgreSQL (JSON support for flexible customization data)
-* **Other:** Image processing library for avatar generation, Redis for caching character states
+* **Framework/language:** Java + Spring Boot (consistent enterprise-grade architecture, excellent ORM support)
+* **Database:** PostgreSQL (JSON support for flexible customization data, ACID properties for inventory consistency)
+* **Other:** Redis for caching character states, Jackson for JSON processing, Spring Data JPA
 * **Communication pattern:** REST API + Event publishing for inventory changes
 
 ### Service Diagram
 ```mermaid
----
-config:
-  layout: dagre
----
 flowchart TD
- subgraph subGraph0["Mafia Application"]
-        B("Character Service <br> Java + Spring Boot")
-        A["Client / Shop Service / Game Service"]
-  end
- subgraph subGraph2["Data Persistence"]
-        D[("PostgreSQL Database")]
-        R[("Redis Cache")]
-  end
-    A -- HTTP/REST API Calls --> B
-    B -- JSON Responses --> A
-    B -- Reads/Writes character data --> D
-    B -- Caches character states --> R
-    style B fill:#f9f,stroke:#333,stroke-width:2px
-    style D fill:#bbf,stroke:#333,stroke-width:2px
-    style R fill:#ffd,stroke:#333,stroke-width:2px
+    subgraph MafiaApp["Mafia Application"]
+        CharService["Character Service<br/>Java + Spring Boot"]
+        Clients["Client / Shop Service / Game Service"]
+    end
+    subgraph DataLayer["Data Persistence"]
+        PostgresDB[("PostgreSQL Database")]
+        RedisCache[("Redis Cache")]
+    end
+    
+    Clients -->|HTTP/REST API Calls| CharService
+    CharService -->|JSON Responses| Clients
+    CharService -->|Reads/Writes character data| PostgresDB
+    CharService -->|Caches character states| RedisCache
+    
+    style CharService fill:#f9f,stroke:#333,stroke-width:2px
+    style PostgresDB fill:#bbf,stroke:#333,stroke-width:2px
+    style RedisCache fill:#ffd,stroke:#333,stroke-width:2px
 ```
 
 ### Schema
