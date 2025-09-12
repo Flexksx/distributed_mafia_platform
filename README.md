@@ -295,15 +295,14 @@ Errors: 409 (lobby full or already joined).
 
 ## Shop Service
 
-**Responsibility**: Manages the in-game economy and item system
+**Core responsibility:** Enables players to prepare for day/night cycles by purchasing protective items and task-assistance objects using in-game currency.
 
 **Functionality**:
-- Inventory management for in-game items
-- Purchase processing using in-game currency
-- Dynamic item availability (daily quantity balancing algorithm)
-- Item effects management (e.g., protection attributes)
-- Transaction history tracking
-- Currency management
+- Item catalog management for protective and task-assistance items
+- Daily quantity balancing algorithm to ensure game economy stability
+- Purchase processing (coordinating with User Management Service for currency)
+- Inventory management for purchased items
+- Item effects management for protection against specific roles/actions
 
 ### Service Diagram
 
@@ -312,6 +311,9 @@ flowchart LR
     subgraph MafiaApplication["Mafia Application"]
         SS[("Shop Service
         Java + Spring Boot")]
+        UMS[("User Management Service")]
+        TS[("Task Service")]
+        RS[("Roleplay Service")]
     end
 
     subgraph DataPersistence["Data Persistence"]
@@ -322,7 +324,11 @@ flowchart LR
 
     Client -- "HTTP/REST API Call" --> SS
     SS -- "JSON Response" --> Client
-    SS -- "Reads/Writes item, inventory, transaction, balance data" --> DB
+    SS -- "Reads/Writes item, inventory, transaction data" --> DB
+    SS -- "Verify/Deduct currency" --> UMS
+    UMS -- "Currency balance/update response" --> SS
+    SS -- "Validate item effects" --> RS
+    SS -- "Check task requirements" --> TS
 ```
 
 ### Domain Models and Interfaces
@@ -334,19 +340,38 @@ interface Item {
   name: string;
   description: string;
   price: number;
-  category: string;
+  category: ItemCategory;
   effects: ItemEffect[];
-  availableQuantity: number;
+  availableQuantity: number; // Managed by daily balancing algorithm
+  maxDailyQuantity: number;  // Used for balancing
+  replenishRate: number;     // Daily restocking rate
   imageUrl: string;
   usageInstructions?: string;
   createdAt: Date;
 }
 
+enum ItemCategory {
+  PROTECTION,        // Items that protect against attacks
+  TASK_ASSISTANCE,   // Items that help with daily tasks
+  UTILITY,           // General purpose items
+  SPECIAL            // Limited edition or event items
+}
+
 interface ItemEffect {
-  type: string;  // PROTECTION, ATTACK_BOOST, ROLE_REVEAL, etc.
-  value: number;
-  duration: number;
-  targetRole?: string;
+  type: EffectType;
+  value: number;      // Effect strength/duration
+  duration: number;   // How many game cycles it lasts
+  targetRole?: string; // Role-specific protections
+}
+
+enum EffectType {
+  WARD_VAMPIRE,       // e.g., garlic
+  DOUSE_ARSONIST,     // e.g., water
+  CONCEAL_IDENTITY,   // e.g., mask
+  REVEAL_ROLE,        // e.g., magnifying glass
+  BOOST_TASK,         // e.g., tools
+  TRACKING,           // e.g., footprint detector
+  BLOCK_ACTION        // e.g., handcuffs
 }
 ```
 
@@ -366,10 +391,11 @@ interface InventoryItem {
 }
 
 interface ActiveItemEffect {
-  type: string;
+  type: EffectType;
   value: number;
   duration: number;
   active: boolean;
+  appliedAt: Date;
 }
 ```
 
@@ -394,23 +420,19 @@ interface PurchasedItem {
 }
 ```
 
-#### Balance
-```typescript
-interface Balance {
-  userId: string;
-  gameId: string;
-  balance: number;
-  lastUpdated: Date;
-}
-```
-
 ### APIs Exposed
 
 #### 1. Get Available Items
 
 **Endpoint:** `GET /api/v1/items`
 
-**Description:** Retrieves all available items for purchase in the shop.
+**Description:** Retrieves all available items for purchase in the shop, with quantities determined by the daily balancing algorithm.
+
+**Query Parameters:**
+- `category` (optional): Filter by ItemCategory (PROTECTION, TASK_ASSISTANCE, etc.)
+- `page` (optional): Page number for pagination
+- `size` (optional): Number of items per page
+- `gameDay` (required): The current game day for proper inventory balancing
 
 **Response Format:**
 ```json
@@ -421,15 +443,15 @@ interface Balance {
       "name": "string",
       "description": "string",
       "price": 0,
-      "category": "string",
+      "category": "PROTECTION",
       "effects": [
         {
-          "type": "string",
-          "value": 0,
-          "duration": 0
+          "type": "WARD_VAMPIRE",
+          "value": 100,
+          "duration": 1
         }
       ],
-      "availableQuantity": 0,
+      "availableQuantity": 5,
       "imageUrl": "string"
     }
   ],
@@ -457,21 +479,21 @@ interface Balance {
 ```json
 {
   "id": "string",
-  "name": "string",
-  "description": "string",
-  "price": 0,
-  "category": "string",
+  "name": "Garlic Necklace",
+  "description": "Wards off vampires for one night",
+  "price": 50,
+  "category": "PROTECTION",
   "effects": [
     {
-      "type": "string",
-      "value": 0,
-      "duration": 0,
-      "targetRole": "string"
+      "type": "WARD_VAMPIRE",
+      "value": 100,
+      "duration": 1,
+      "targetRole": "VAMPIRE"
     }
   ],
-  "availableQuantity": 0,
+  "availableQuantity": 5,
   "imageUrl": "string",
-  "usageInstructions": "string",
+  "usageInstructions": "Wear during the night phase for protection",
   "createdAt": "string (ISO-8601 format)"
 }
 ```
@@ -485,13 +507,14 @@ interface Balance {
 
 **Endpoint:** `POST /api/v1/purchases`
 
-**Description:** Processes a purchase transaction for one or more items.
+**Description:** Processes a purchase transaction for one or more items. Coordinates with User Management Service to verify and deduct currency.
 
 **Request Format:**
 ```json
 {
   "userId": "string",
   "gameId": "string",
+  "gameDay": 3,
   "items": [
     {
       "itemId": "string",
@@ -512,18 +535,19 @@ interface Balance {
   "items": [
     {
       "itemId": "string",
-      "name": "string",
-      "quantity": 0,
-      "unitPrice": 0,
-      "totalPrice": 0
+      "name": "Garlic Necklace",
+      "quantity": 1,
+      "unitPrice": 50,
+      "totalPrice": 50
     }
   ],
-  "message": "string"
+  "message": "Purchase successful"
 }
 ```
 
 **Status Codes:**
 - 201: Purchase successful
+- 400: Insufficient funds or quantity not available
 - 404: Item not found
 - 500: Server error
 
@@ -536,6 +560,9 @@ interface Balance {
 **Path Parameters:**
 - `userId`: Unique identifier of the user
 
+**Query Parameters:**
+- `gameId` (required): The game context for the inventory
+
 **Response Format:**
 ```json
 {
@@ -545,17 +572,17 @@ interface Balance {
     {
       "id": "string",
       "itemId": "string",
-      "name": "string",
-      "quantity": 0,
+      "name": "Garlic Necklace",
+      "quantity": 1,
       "used": false,
       "acquiredAt": "string (ISO-8601 format)",
       "expiresAt": "string (ISO-8601 format)",
       "effects": [
         {
-          "type": "string",
-          "value": 0,
-          "duration": 0,
-          "active": true
+          "type": "WARD_VAMPIRE",
+          "value": 100,
+          "duration": 1,
+          "active": false
         }
       ]
     }
@@ -568,38 +595,11 @@ interface Balance {
 - 404: User not found or no inventory
 - 500: Server error
 
-#### 5. Check User Balance
+#### 5. Use Item
 
-**Endpoint:** `GET /api/v1/balance/{userId}`
+**Endpoint:** `POST /api/v1/inventory/{userId}/use`
 
-**Description:** Checks the current game currency balance of a user.
-
-**Path Parameters:**
-- `userId`: Unique identifier of the user
-
-**Query Parameters:**
-- `gameId` (required): The game context for the balance
-
-**Response Format:**
-```json
-{
-  "userId": "string",
-  "gameId": "string",
-  "balance": 0,
-  "lastUpdated": "string (ISO-8601 format)"
-}
-```
-
-**Status Codes:**
-- 200: Success
-- 404: User or game not found
-- 500: Server error
-
-#### 6. Update User Balance
-
-**Endpoint:** `PUT /api/v1/balance/{userId}`
-
-**Description:** Updates the game currency balance of a user.
+**Description:** Uses an item from the user's inventory and applies its protective or task-assistance effects.
 
 **Path Parameters:**
 - `userId`: Unique identifier of the user
@@ -608,35 +608,120 @@ interface Balance {
 ```json
 {
   "gameId": "string",
-  "amount": 0,
-  "operation": "ADD|SUBTRACT|SET",
-  "reason": "string"
+  "gameDay": 3,
+  "gameCycle": "NIGHT",
+  "inventoryItemId": "string",
+  "targetUserId": "string"
 }
 ```
 
 **Response Format:**
 ```json
 {
-  "userId": "string",
-  "gameId": "string",
-  "previousBalance": 0,
-  "currentBalance": 0,
-  "transactionId": "string",
-  "timestamp": "string (ISO-8601 format)"
+  "success": true,
+  "message": "Garlic Necklace activated for night protection",
+  "appliedEffects": [
+    {
+      "type": "WARD_VAMPIRE",
+      "value": 100,
+      "duration": 1
+    }
+  ],
+  "remainingQuantity": 0
 }
 ```
 
 **Status Codes:**
 - 200: Success
-- 404: User or game not found
+- 404: Item not found in inventory
+- 400: Invalid use conditions
 - 500: Server error
+
+#### 6. Get Daily Stock Status
+
+**Endpoint:** `GET /api/v1/items/stock-status`
+
+**Description:** Provides information about the current stock levels and next restock time.
+
+**Query Parameters:**
+- `gameId` (required): The game context
+- `gameDay` (required): The current game day
+
+**Response Format:**
+```json
+{
+  "gameDay": 3,
+  "nextRestockTime": "string (ISO-8601 format)",
+  "rareItemsAvailable": true,
+  "categories": [
+    {
+      "name": "PROTECTION",
+      "itemsAvailable": 4,
+      "totalItems": 6
+    },
+    {
+      "name": "TASK_ASSISTANCE",
+      "itemsAvailable": 8,
+      "totalItems": 10
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 400: Invalid parameters
+- 500: Server error
+
+### Inter-Service Communication
+
+#### Outgoing Requests:
+
+1. **To User Management Service**
+   - Check user currency balance before purchase
+   - Deduct currency after successful purchase
+   - API: `POST v1/users/{id}/currency` with transaction type "SUBTRACT"
+
+2. **To Roleplay Service**
+   - Verify item effect compatibility with user's role
+   - Register active protection effects when items are used
+   - API: `POST /api/v1/actions/verify-item`
+
+3. **To Task Service**
+   - Check if an item satisfies a task requirement
+   - API: `GET /v1/tasks/verify-item`
+
+#### Incoming Requests:
+
+1. **From Game Service**
+   - Request for active protection effects during night phase
+   - Request for inventory information during day phase
+
+2. **From Roleplay Service**
+   - Check active protections when processing role actions
 
 ### Implementation Considerations
 
-- Implement daily item stock refresh algorithm
-- Track purchase history for audit purposes
-- Provide item effectiveness metadata for Roleplay Service
-- Implement transaction locking to prevent race conditions
+- **Daily Item Balancing Algorithm**: Implements a dynamic balancing system that:
+  - Adjusts available quantities based on player counts and game day
+  - Creates artificial scarcity for powerful items
+  - Ensures all player roles have access to appropriate protective items
+  - Randomizes some stock quantities to prevent predictable patterns
+
+- **Protection Effectiveness System**: 
+  - Different protection items have varying effectiveness against specific roles
+  - Some items provide partial protection (percentage-based)
+  - Stacking rules prevent overpowered combinations
+
+- **Transaction Safety**:
+  - Implement optimistic locking for inventory operations
+  - Ensure atomic transactions when purchasing limited items
+  - Add idempotency keys for purchase operations
+
+- **Performance Optimization**:
+  - Cache frequently accessed catalog items
+  - Batch update inventory records
+  - Use read replicas for inventory queries during high-traffic periods
 
 ## Roleplay Service
 
