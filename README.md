@@ -725,35 +725,47 @@ interface PurchasedItem {
 
 ## Roleplay Service
 
-**Responsibility**: Controls game mechanics related to player roles and actions
+**Core responsibility:** Controls role-specific game mechanics and handles player role-based actions.
 
 **Functionality**:
-- Role assignment and management
-- Processing role-specific actions (e.g., Mafia kills, Sheriff investigations)
-- Checking item effectiveness during actions
-- Recording all action attempts for audit purposes
-- Creating filtered announcements for the Game Service to broadcast
-- Enforcing role-specific rules and constraints
+- Role ability execution (e.g., Mafia kills, Sheriff investigations)
+- Role-based action validation and processing
+- Action outcome determination based on roles and item protections
+- Recording action attempts for game integrity
+- Creating filtered announcements for consumption by Game Service
+- Managing role-specific rules, constraints, and interactions
 
-### Service diagram
+### Tech stack
+
+* **Framework/language:** Java + Spring Boot (strong typing for role action logic)
+* **Database:** PostgreSQL (ACID transactions for critical role actions)
+* **Other:** Role action evaluation engine, protection status checker
+* **Communication pattern:** Internal REST API, event notifications to Game Service
+
+### Service Diagram
 
 ```mermaid
 flowchart LR
     subgraph MafiaApplication["Mafia Application"]
         RS[("Roleplay Service
         Java + Spring Boot")]
+        GS[("Game Service")]
+        SS[("Shop Service")]
     end
 
     subgraph DataPersistence["Data Persistence"]
         DB[(PostgreSQL Database)]
     end
 
-    Client["Client / Other Services"]
-
-    Client -- "HTTP/REST API Call" --> RS
-    RS -- "JSON Response" --> Client
-    RS -- "Reads/Writes roles, actions, announcements, player status" --> DB
-
+    Client["Client"]
+    
+    Client -- "Action Requests" --> RS
+    RS -- "Action Results" --> Client
+    RS -- "Role Actions Data" --> DB
+    GS -- "Game State" --> RS
+    RS -- "Action Outcomes" --> GS
+    SS -- "Item Effects" --> RS
+    RS -- "Protection Status" --> SS
 ```
 
 ### Domain Models and Interfaces
@@ -832,19 +844,6 @@ interface ActionResult {
 }
 ```
 
-#### Announcement
-```typescript
-interface Announcement {
-  announcementId: string;
-  gameId: string;
-  message: string;
-  visibleTo: ('ALL' | 'MAFIA' | 'TOWN' | 'SPECIFIC_ROLE' | 'SPECIFIC_USER')[];
-  targetUsers?: string[];
-  phase: 'DAY' | 'NIGHT';
-  timestamp: Date;
-}
-```
-
 ### APIs Exposed
 
 #### 1. Perform Role Action
@@ -889,78 +888,30 @@ interface Announcement {
 - 404: User, game, or target not found
 - 500: Server error
 
-#### 2. Get Available Roles
+#### 2. Get Available Role Actions
 
-**Endpoint:** `GET /api/v1/roles`
+**Endpoint:** `GET /api/v1/actions/available`
 
-**Description:** Retrieves information about all available roles in the game.
-
-**Response Format:**
-```json
-{
-  "roles": [
-    {
-      "id": "string",
-      "name": "string",
-      "alignment": "TOWN|MAFIA|NEUTRAL",
-      "description": "string",
-      "abilities": [
-        {
-          "name": "string",
-          "description": "string",
-          "usablePhase": "DAY|NIGHT|BOTH",
-          "cooldown": 0,
-          "targets": 0
-        }
-      ],
-      "winCondition": "string"
-    }
-  ]
-}
-```
-
-**Status Codes:**
-- 200: Success
-- 500: Server error
-
-#### 3. Get User Role
-
-**Endpoint:** `GET /api/v1/roles/{userId}`
-
-**Description:** Retrieves the role assigned to a specific user in a game.
-
-**Path Parameters:**
-- `userId`: Unique identifier of the user
+**Description:** Retrieves available actions for a user's role in the current game phase.
 
 **Query Parameters:**
-- `gameId` (required): The game context for the role query
+- `gameId` (required): The game context
+- `userId` (required): The user requesting available actions
+- `phase` (required): Game phase (DAY, NIGHT)
 
 **Response Format:**
 ```json
 {
-  "userId": "string",
-  "gameId": "string",
-  "roleName": "string",
-  "alignment": "TOWN|MAFIA|NEUTRAL",
-  "abilities": [
+  "actions": [
     {
-      "name": "string",
+      "actionType": "string",
       "description": "string",
-      "usablePhase": "DAY|NIGHT|BOTH",
+      "targets": 0,
       "cooldown": 0,
-      "remainingCooldown": 0,
-      "used": false,
-      "targets": 0
+      "remainingCooldown": 0
     }
   ],
-  "alive": true,
-  "protectionStatus": [
-    {
-      "type": "string",
-      "source": "string",
-      "expiresAt": "string (ISO-8601 format)"
-    }
-  ]
+  "currentPhase": "DAY|NIGHT"
 }
 ```
 
@@ -969,97 +920,41 @@ interface Announcement {
 - 404: User or game not found
 - 500: Server error
 
-#### 4. Create Game Announcement
+#### 3. Verify Item Effects Against Role
 
-**Endpoint:** `POST /api/v1/announcements`
+**Endpoint:** `POST /api/v1/actions/verify-item`
 
-**Description:** Creates a filtered game announcement based on game events.
+**Description:** Verifies if an item effect is applicable against a specific role.
 
 **Request Format:**
 ```json
 {
-  "gameId": "string",
-  "eventType": "string",
-  "rawData": {
-    "key1": "value1",
-    "key2": "value2"
-  },
-  "visibleTo": ["ALL|MAFIA|TOWN|SPECIFIC_ROLE|SPECIFIC_USER"],
-  "targetUsers": ["string"],
-  "phase": "DAY|NIGHT",
-  "timestamp": "string (ISO-8601 format)"
+  "itemId": "string",
+  "effectType": "string",
+  "targetRoleId": "string",
+  "gamePhase": "DAY|NIGHT"
 }
 ```
 
 **Response Format:**
 ```json
 {
-  "announcementId": "string",
-  "gameId": "string",
-  "message": "string",
-  "visibleTo": ["ALL|MAFIA|TOWN|SPECIFIC_ROLE|SPECIFIC_USER"],
-  "targetUsers": ["string"],
-  "phase": "DAY|NIGHT",
-  "timestamp": "string (ISO-8601 format)"
-}
-```
-
-**Status Codes:**
-- 201: Announcement created
-- 404: Game not found
-- 500: Server error
-
-#### 5. Get Action History
-
-**Endpoint:** `GET /api/v1/actions/history`
-
-**Description:** Retrieves the history of actions in a game (admin only).
-
-**Query Parameters:**
-- `gameId` (required): The game context for the action history
-
-**Response Format:**
-```json
-{
-  "actions": [
-    {
-      "actionId": "string",
-      "gameId": "string",
-      "userId": "string",
-      "roleName": "string",
-      "actionType": "string",
-      "targets": ["string"],
-      "usedItems": ["string"],
-      "gamePhase": "DAY|NIGHT",
-      "status": "PENDING|SUCCESS|FAILED|BLOCKED",
-      "results": [
-        {
-          "targetId": "string",
-          "outcome": "string",
-          "visible": true,
-          "message": "string"
-        }
-      ],
-      "timestamp": "string (ISO-8601 format)"
-    }
-  ],
-  "totalActions": 0,
-  "totalPages": 0,
-  "currentPage": 0
+  "effective": true,
+  "effectMultiplier": 1.0,
+  "message": "Item is effective against this role"
 }
 ```
 
 **Status Codes:**
 - 200: Success
-- 403: Unauthorized access
-- 404: Game not found
+- 404: Item or role not found
 - 500: Server error
 
-#### 6. Get Action Results
+#### 4. Get Action Results
 
 **Endpoint:** `GET /api/v1/actions/results`
 
-**Description:** Retrieves the results of actions for the current phase.
+**Description:** Retrieves the results of actions for the current phase visible to the requesting user.
 
 **Query Parameters:**
 - `gameId` (required): The game context for the action results
@@ -1074,8 +969,6 @@ interface Announcement {
   "results": [
     {
       "actionType": "string",
-      "actor": "string",
-      "targets": ["string"],
       "outcome": "string",
       "message": "string",
       "timestamp": "string (ISO-8601 format)"
@@ -1084,11 +977,9 @@ interface Announcement {
   "roleSpecificResults": [
     {
       "actionType": "string",
-      "actor": "string",
       "targets": ["string"],
       "outcome": "string",
       "message": "string",
-      "visibleTo": ["string"],
       "timestamp": "string (ISO-8601 format)"
     }
   ]
@@ -1101,94 +992,32 @@ interface Announcement {
 - 404: Game or user not found
 - 500: Server error
 
-### Inter-Service Event Formats
+### Dependencies
 
-Beyond REST APIs, services communicate asynchronously via events. Below are the key event formats:
+* Game Service: provides game state, player roles, and cycles
+* Shop Service: item effects verification and protection status
+* User Management Service: user authentication and role validation
 
-#### Shop Service Events
+### Inter-Service Communication
 
-1. **Item Purchased Event**
-```json
-{
-  "eventType": "ITEM_PURCHASED",
-  "transactionId": "string",
-  "userId": "string",
-  "gameId": "string",
-  "items": [
-    {
-      "itemId": "string",
-      "name": "string",
-      "quantity": 0,
-      "effects": [
-        {
-          "type": "string",
-          "value": 0,
-          "duration": 0,
-          "targetRole": "string"
-        }
-      ]
-    }
-  ],
-  "timestamp": "string (ISO-8601 format)"
-}
-```
+#### Receives from Game Service:
+- Game state updates (day/night cycle)
+- Player role assignments
+- Player alive/dead status
 
-2. **Item Used Event**
-```json
-{
-  "eventType": "ITEM_USED",
-  "userId": "string",
-  "gameId": "string",
-  "itemId": "string",
-  "inventoryItemId": "string",
-  "targetUserId": "string",
-  "effects": [
-    {
-      "type": "string",
-      "value": 0,
-      "duration": 0,
-      "targetRole": "string"
-    }
-  ],
-  "timestamp": "string (ISO-8601 format)"
-}
-```
+#### Sends to Game Service:
+- Action outcomes for announcements
+- Role-based event notifications
+- Player status change requests (e.g., death from Mafia kill)
 
-#### Roleplay Service Events
+#### Receives from Shop Service:
+- Item protection status for target players
+- Item effect details for action resolution
 
-1. **Action Completed Event**
-```json
-{
-  "eventType": "ACTION_COMPLETED",
-  "actionId": "string",
-  "gameId": "string",
-  "userId": "string",
-  "roleName": "string",
-  "actionType": "string",
-  "targets": ["string"],
-  "status": "SUCCESS|FAILED|BLOCKED",
-  "publicOutcome": "string",
-  "timestamp": "string (ISO-8601 format)"
-}
-```
+#### Sends to Shop Service:
+- Item effectiveness verification requests
+- Item usage outcome notifications
 
-2. **Player Status Changed Event**
-```json
-{
-  "eventType": "PLAYER_STATUS_CHANGED",
-  "userId": "string",
-  "gameId": "string",
-  "alive": true,
-  "statusEffects": [
-    {
-      "type": "string",
-      "source": "string",
-      "expiresAt": "string (ISO-8601 format)"
-    }
-  ],
-  "timestamp": "string (ISO-8601 format)"
-}
-```
 ## Rumors Service
 
 * **Core responsibility:** Currency-based information marketplace allowing players to purchase intelligence about other players based on their tasks and appearance data. Track information availability by role restrictions and generate rumors from Task Service and Character Service data.
