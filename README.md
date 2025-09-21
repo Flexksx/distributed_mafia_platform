@@ -1642,8 +1642,9 @@ public class Character {
     private String userId;                   // references User Service
     private String name;                     // display name
     private List<EquippedAsset> equipped;    // equipped assets
-    private String createdAt;
-    private String updatedAt;
+    private Instant createdAt;
+    private Instant updatedAt;
+
 }
 
 public class Asset {
@@ -1651,17 +1652,26 @@ public class Asset {
     private String name;                     // e.g., "Red Coat", "Spiky Hair"
     private String description;
     private SlotType slot;                   // where it can be equipped
-    private String rarity;                   // common, rare, epic
-    private String createdAt;
-    private String updatedAt;
+    private RarityType rarity;               // enum for consistency
+
+    public enum RarityType {
+        COMMON,
+        RARE,
+        EPIC
+    }
 }
 
 public class InventoryItem {
     private String id;
     private String userId;
     private String assetId;                  // references Asset
-    private String acquiredAt;
-    private String source;                   // SHOP_PURCHASE, QUEST_REWARD
+    private Instant acquiredAt;
+    private AcquisitionSource source;        // enum for acquisition source
+
+    public enum AcquisitionSource {
+        SHOP_PURCHASE,
+        QUEST_REWARD
+    }
 }
 
 public class EquippedAsset {
