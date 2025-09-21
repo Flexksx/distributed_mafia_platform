@@ -1487,8 +1487,8 @@ public class UserLocation {
     private String locationId;  // references Location
     private String enteredAt;
     private String exitedAt; 
-
 }
+
 ```
 ## Endpoints
 
@@ -1532,25 +1532,30 @@ public class UserLocation {
 
   **Responses:** `201`
 
-* `GET v1/users/{id}/location`
+* `GET /v1/location?user_id={userId}`
   Get the user’s current location.
 
   **Response:**
 
   ```json
-  { "locationId": "loc1", "enteredAt": "2025-09-21T12:00:00Z" }
+  + {
+  +   "userId": "u123",
+  +   "locationId": "loc1",
+  +   "enteredAt": "2025-09-21T12:00:00Z"
+  + }
   ```
 
-* `GET v1/users/{id}/movements`
+* `GET /v1/movements?user_id={userId}`
   Get the user’s movement history.
 
   **Response:**
 
   ```json
-  [
-    { "locationId": "loc1", "enteredAt": "...", "exitedAt": "..." },
-    { "locationId": "loc2", "enteredAt": "...", "exitedAt": null }
-  ]
+  + [
+  +   { "userId": "u123", "locationId": "loc1", "enteredAt": "...", "exitedAt": "..." },
+  +   { "userId": "u123", "locationId": "loc2", "enteredAt": "...", "exitedAt": null }
+  + ]
+
   ```
 
 ---
