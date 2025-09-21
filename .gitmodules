@@ -29,3 +29,6 @@
 [submodule "task-service"]
 	path = task-service
 	url = git@github.com:XRRRA/task-service.git
+[submodule "services/town-service"]
+	path = services/town-service
+	url = https://github.com/LiviuTofan/town-service

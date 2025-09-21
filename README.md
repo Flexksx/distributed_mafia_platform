@@ -1488,7 +1488,6 @@ public class UserLocation {
     private String enteredAt;
     private String exitedAt; 
 }
-
 ```
 ## Endpoints
 
