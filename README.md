@@ -1440,3 +1440,50 @@ Errors
 
 ## Data ownership:
 This service exclusively manages `vote_windows`, `votes`, and `vote_results`. No other service writes to this DB.
+
+# Town Service
+
+## Overview
+The **Town Service** manages all available locations in the town (including the **Shop** and the **Information Bureau**).  
+It tracks user movements across these locations and reports them to the **Task Service** for further processing.  
+
+This service is minimal by design and does not handle authentication or sensitive data (delegated to the **User Management Service**).  
+
+---
+
+## Core Responsibilities
+- Store and manage a catalog of **locations** in the town.
+- Track **user movements** between locations.
+- Provide an API to query current location, movement history, and available destinations.
+- Notify the **Task Service** when relevant movements happen (e.g., entering Shop).
+
+---
+
+## Tech Stack
+- **Language/Framework**: Java + Spring Boot  
+- **Database**: PostgreSQL  
+- **Communication**: Internal REST API + (later optional) message broker for events  
+- **Other**: Jackson (JSON serialization), Flyway (DB migrations)  
+
+---
+
+## Data Schema
+
+### Entities
+
+```java
+interface Location {
+    id: string;
+    name: string;           // unique name, e.g., "Shop", "TownSquare"
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+interface UserLocation {
+    id: string;
+    userId: string;         // from User Service
+    locationId: string;     // references Location
+    enteredAt: string;
+    exitedAt?: string;
+}
