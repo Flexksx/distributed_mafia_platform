@@ -1441,6 +1441,7 @@ Errors
 ## Data ownership:
 This service exclusively manages `vote_windows`, `votes`, and `vote_results`. No other service writes to this DB.
 
+
 # Town Service
 
 ## Overview
@@ -1462,8 +1463,8 @@ This service is minimal by design and does not handle authentication or sensitiv
 ## Tech Stack
 - **Language/Framework**: Java + Spring Boot  
 - **Database**: PostgreSQL  
-- **Communication**: Internal REST API + (later optional) message broker for events  
-- **Other**: Jackson (JSON serialization), Flyway (DB migrations)  
+- **Communication**: Internal REST API for events  
+- **Other**: JSON serialization, DB migrations  
 
 ---
 
@@ -1472,18 +1473,125 @@ This service is minimal by design and does not handle authentication or sensitiv
 ### Entities
 
 ```java
-interface Location {
-    id: string;
-    name: string;           // unique name, e.g., "Shop", "TownSquare"
-    description?: string;
-    createdAt: string;
-    updatedAt: string;
+public class Location {
+    private String id;
+    private String name;        // unique name, e.g., "Shop", "TownSquare"
+    private String description;
+    private String createdAt;
+    private String updatedAt;
 }
 
-interface UserLocation {
-    id: string;
-    userId: string;         // from User Service
-    locationId: string;     // references Location
-    enteredAt: string;
-    exitedAt?: string;
+public class UserLocation {
+    private String id;
+    private String userId;      // from User Service
+    private String locationId;  // references Location
+    private String enteredAt;
+    private String exitedAt; 
+
 }
+```
+## Endpoints
+
+### **Locations**
+
+* `GET v1/locations`
+  Returns a list of all available locations.
+
+  **Response:**
+
+  ```json
+  [
+    { "id": "loc1", "name": "Shop", "description": "Main item shop" }
+  ]
+  ```
+
+* `POST v1/locations`
+  Create a new location.
+
+  **Body:**
+
+  ```json
+  { "name": "Library", "description": "Silent reading area" }
+  ```
+
+  **Responses:** `201` | `409` (duplicate name)
+
+---
+
+### **Movements**
+
+* `POST v1/movements`
+  Record a user entering a new location.
+  If the user already has an active location, that record will be closed with `exitedAt`.
+
+  **Body:**
+
+  ```json
+  { "userId": "u123", "locationId": "loc1" }
+  ```
+
+  **Responses:** `201`
+
+* `GET v1/users/{id}/location`
+  Get the user’s current location.
+
+  **Response:**
+
+  ```json
+  { "locationId": "loc1", "enteredAt": "2025-09-21T12:00:00Z" }
+  ```
+
+* `GET v1/users/{id}/movements`
+  Get the user’s movement history.
+
+  **Response:**
+
+  ```json
+  [
+    { "locationId": "loc1", "enteredAt": "...", "exitedAt": "..." },
+    { "locationId": "loc2", "enteredAt": "...", "exitedAt": null }
+  ]
+  ```
+
+---
+
+## Dependencies
+
+* PostgreSQL DB Container
+* Flyway (DB migrations)
+* Jackson (JSON serialization)
+* (Optional later) Kafka / RabbitMQ for reporting to Task Service
+
+---
+
+## Example Flow
+
+1. User logs in via **User Management Service**.
+2. Client calls `POST /movements` to move user into **TownSquare**.
+3. Service stores the record and notifies **Task Service**.
+4. Client calls `GET /users/{id}/location` to fetch the active location.
+
+---
+
+## Service Diagram
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart TD
+  subgraph subGraph0["Mafia Application"]
+        A["Client / Other Services (e.g. User Service, Task Service)"]
+        B("Town Service <br> Java + Spring Boot")
+  end
+  subgraph subGraph2["Data Persistence"]
+        D[("PostgreSQL Database")]
+  end
+
+    A -- HTTP/REST API Calls --> B
+    B -- JSON Responses / Notifications --> A
+    B -- Reads/Writes locations & movements --> D
+
+    style B fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#bbf,stroke:#333,stroke-width:2px
