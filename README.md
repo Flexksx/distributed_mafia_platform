@@ -1599,3 +1599,210 @@ flowchart TD
 
     style B fill:#f9f,stroke:#333,stroke-width:2px
     style D fill:#bbf,stroke:#333,stroke-width:2px
+```
+---
+
+# Character Service
+
+## Overview
+
+The **Character Service** manages player characters, their customization, and their in-game inventories.
+It enables players to personalize their avatar by equipping items (assets) into specific **slots** (e.g., hair, coat, shoes), as well as manage purchased assets from the **Shop**.
+
+This service is the core of user visual identity and customization. It stores character state and communicates with the **Town Service** and **Shop Service** when assets are acquired or updated.
+
+---
+
+## Core Responsibilities
+
+* Create and manage **characters** associated with users.
+* Store a list of available **assets** for customization.
+* Provide **slots** for equipping items (e.g., `hair`, `eyes`, `coat`, `weapon`).
+* Track the **inventory** of owned assets purchased via the **Shop**.
+* Equip/unequip items from a user’s inventory to their character.
+* Provide APIs to fetch a character’s current appearance and inventory.
+
+---
+
+## Tech Stack
+
+* **Language/Framework**: Java + Spring Boot
+* **Database**: PostgreSQL
+* **Other**: JSON serialization, DB migrations (Flyway / Liquibase), optional caching (Redis)
+
+---
+
+## Data Schema
+
+### Entities
+
+```java
+public class Character {
+    private String id;
+    private String userId;                   // references User Service
+    private String name;                     // display name
+    private List<EquippedAsset> equipped;    // equipped assets
+    private String createdAt;
+    private String updatedAt;
+}
+
+public class Asset {
+    private String id;
+    private String name;                     // e.g., "Red Coat", "Spiky Hair"
+    private String description;
+    private SlotType slot;                   // where it can be equipped
+    private String rarity;                   // common, rare, epic
+    private String createdAt;
+    private String updatedAt;
+}
+
+public class InventoryItem {
+    private String id;
+    private String userId;
+    private String assetId;                  // references Asset
+    private String acquiredAt;
+    private String source;                   // SHOP_PURCHASE, QUEST_REWARD
+}
+
+public class EquippedAsset {
+    private SlotType slot;
+    private String assetId;
+}
+
+public enum SlotType {
+    HAIR,
+    FACE,
+    COAT,
+    ACCESSORY,
+    SHOES,
+    WEAPON
+}
+```
+
+---
+
+## Endpoints
+
+### **Characters**
+
+* `POST /v1/characters`
+  Create a new character for a user.
+
+  **Body:**
+
+  ```json
+  {
+    "userId": "u123",
+    "name": "Hero123"
+  }
+  ```
+
+  **Responses:** `201` | `409` (character already exists for user)
+
+* `GET /v1/characters/{id}`
+  Retrieve character details, including equipped assets.
+
+* `PATCH /v1/characters/{id}`
+  Update character name or equipped assets.
+
+---
+
+### **Assets**
+
+* `GET /v1/assets`
+  Returns a list of all available customization assets.
+
+* `POST /v1/assets`
+  Add a new asset (admin only).
+
+  **Body:**
+
+  ```json
+  { "name": "Blue Hat", "slot": "ACCESSORY", "rarity": "common" }
+  ```
+
+---
+
+### **Inventory**
+
+* `GET /v1/users/{userId}/inventory`
+  Get a user’s owned assets.
+
+* `POST /v1/users/{userId}/inventory`
+  Add an asset to user’s inventory (e.g., after shop purchase).
+
+  **Body:**
+
+  ```json
+  { "assetId": "a123", "source": "SHOP_PURCHASE" }
+  ```
+
+* `POST /v1/characters/{characterId}/equip`
+  Equip an asset from inventory to character.
+
+  **Body:**
+
+  ```json
+  { "assetId": "a123", "slot": "COAT" }
+  ```
+
+* `POST /v1/characters/{characterId}/unequip`
+  Unequip an asset from a slot.
+
+  **Body:**
+
+  ```json
+  { "slot": "COAT" }
+  ```
+
+---
+
+## Dependencies
+
+* PostgreSQL DB Container
+* Flyway / Liquibase (DB migrations)
+* Jackson (JSON serialization)
+* Redis (optional, for caching character appearances)
+* Integration with **User Management Service** (validate user exists)
+* Integration with **Shop Service** (sync asset purchases)
+
+---
+
+## Example Flow
+
+1. User buys a **Red Coat** in **Shop Service**.
+2. Shop Service calls Character Service `POST /inventory` to add the asset.
+3. User opens profile screen and equips the coat using `POST /characters/{id}/equip`.
+4. Character Service stores the equipped state and makes it available via `GET /characters/{id}`.
+5. Game client fetches updated appearance.
+
+---
+
+## Service Diagram
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart TD
+  subgraph subGraph0["Mafia Application"]
+        A["Client / Game Client"]
+        B("Character Service <br> Java + Spring Boot")
+        C("User Management Service")
+        D("Shop Service")
+  end
+
+  subgraph subGraph2["Data Persistence"]
+        DB[("PostgreSQL Database")]
+  end
+
+    A -- REST API Calls --> B
+    B -- Validates User --> C
+    D -- Purchase Events --> B
+    B -- Reads/Writes characters, inventory, assets --> DB
+    B -- Returns Character State --> A
+
+    style B fill:#f9f,stroke:#333,stroke-width:2px
+    style DB fill:#bbf,stroke:#333,stroke-width:2px
+```
