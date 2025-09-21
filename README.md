@@ -1,6 +1,9 @@
 # distributed_applications_labs
 
+
 ## User Management Service
+
+**Dockerhub link** <https://hub.docker.com/repository/docker/flexksx/mafia_user_management_service/general>
 
 * **Core responsibility:** Single user profile (email, username, hashed password) + in‑game currency balance.
 * Track simple profiling info: device fingerprints and last known IP/location to discourage duplicate accounts.
@@ -9,9 +12,8 @@
 ### Tech stack
 
 * **Framework/language:** Express.js + TypeScript (fast iteration, typing)
-* **Database:** PostgreSQL (transactions for currency updates)
-* **Other:** Password hashing library (argon2/bcrypt)
-* **Communication pattern:** Internal REST API + direct DB persistence
+* **Database:** PostgreSQL (transactions for currency updates). Prisma ORM is used for easy data manipulation.
+* **Communication pattern:** For external communication it exposes a REST API, for internal communication it uses a persisted db connection exposed by the Prisma APIs.
 
 ### Service Diagram
 
@@ -37,7 +39,7 @@ flowchart TD
 
 ### Schema
 
-Minimal types only.
+Entities exposed by the rest API
 
 ```typescript
 interface User {
@@ -45,11 +47,9 @@ interface User {
     email: string;        // unique
     username: string;     // unique
     passwordHash: string; // not exposed
-    currency: number;     // float
     transactions: CurrencyTransaction[];
-    lastIp?: string;
-    lastCountry?: string;
     devices: Device[];
+    accessEvents: UserAccessEvent[];
     updatedAt: string;
     createdAt: string;
 }
@@ -78,16 +78,28 @@ interface CurrencyTransaction {
     id: string;
     userId: string;
     transactionType: TransactionType; 
-    resultingBalance: number; // after apply
+    amount: number;
+    reason?: string;
     createdAt: string;
+}
+
+interface UserAccessEvent { 
+    id: string;
+    seenAt: Date;
+    userId: string;
+    deviceId?: string;
+    ip?: string;
+    country?: string;
 }
 ```
 
 ### Endpoints
 
-Minimal set for MVP.
+Comprehensive REST API for user management, currency transactions, device tracking, and access event monitoring.
 
-#### `GET v1/users/{id}` – Retrieve user by ID
+### User Endpoints
+
+### `GET /v1/users/{id}` – Retrieve user by ID
 
 Returns a user DAO
 
@@ -96,59 +108,275 @@ interface UserDao {
     id: string;
     email: string;
     username: string;
-    currency: number;
-    lastCountry?: string;
     updatedAt: string;
     createdAt: string;
 }
 ```
 
-#### `GET v1/users` - List method with optional filters
+### `GET /v1/users` - List users with optional filters
 
 **Query Params:**
 
-* `username` - string, query by username
 * `email` - string, query by email
+* `emails` - array of strings, query by multiple emails
+* `limit` - number, pagination limit
+* `offset` - number, pagination offset
 
-#### `POST v1/users` – Create user
+Returns an array of `UserDao`.
 
-Body:
+### `POST /v1/users` – Create user
+
+**Request Body:**
 
 ```json
 {
     "email": "user@example.com",
     "username": "playerOne",
-    "password": "PlainPassword!", // hash on the server
-    "initialDevice": { "fingerprint": "sha256:abcd...", "platform": "web" },
-    "initialLocation": { "country": "DE" }
+    "password": "plaintext_password"
 }
 ```
 
-Responses: 201 | 409 (email/username in use).
+**Responses:** 201 (Created) | 400 (Missing required fields)
 
-#### `POST v1/users/{id}/devices` – Register device
+### `PUT /v1/users/{id}` – Update user
 
-Body:
-
-```json
-{ "fingerprint": "sha256:abcd...", "platform": "web" }
-```
-
-Same fingerprint updates timestamp.
-
-#### `GET v1/users/{id}/devices` – List devices
-
-Returns array of device metadata.
-
-#### `POST v1/users/{id}/currency` - Add a transaction to the user
-
-Body:
+**Request Body:**
 
 ```json
-{ "amount": 500, "reason": "REWARD", "type":"ADD" }
+{
+    "email": "newemail@example.com",
+    "username": "newUsername", 
+    "password": "newPassword"
+}
 ```
 
-#### `GET v1/users/{id}/currency/transactions` – History
+At least one field must be provided.
+
+**Responses:** 200 (OK) | 400 (Validation error) | 404 (User not found)
+
+### `DELETE /v1/users/{id}` – Delete user
+
+**Responses:** 200 (OK) | 404 (User not found)
+
+### `GET /v1/users/{id}/balance` – Get user's currency balance
+
+Returns detailed balance information:
+
+```typescript
+interface UserBalance {
+    userId: string;
+    balance: number;
+    totalTransactions: number;
+    totalAdd: number;
+    totalSubtract: number;
+}
+```
+
+### Device Endpoints
+
+### `GET /v1/devices/{id}` – Get device by ID
+
+**Responses:** 200 (OK) | 404 (Device not found)
+
+### `GET /v1/devices` – List devices
+
+**Query Params:**
+
+* `userId` - string, filter by user ID
+* `fingerprint` - string, filter by device fingerprint
+* `limit` - number, pagination limit
+* `offset` - number, pagination offset
+
+### `POST /v1/devices` – Create device
+
+**Request Body:**
+
+```json
+{
+    "userId": "user-uuid",
+    "device": {
+        "fingerprint": "sha256:abcd...",
+        "platform": "WEB"
+    }
+}
+```
+
+**Responses:** 201 (Created) | 400 (Missing required fields)
+
+### `DELETE /v1/devices/{id}` – Delete device
+
+**Responses:** 200 (OK) | 404 (Device not found)
+
+### User Device Endpoints
+
+### `GET /v1/users/{id}/devices` – List devices for a user
+
+**Query Params:**
+
+* `limit` - number, pagination limit
+* `offset` - number, pagination offset
+
+### `POST /v1/users/{id}/devices` – Create device for a user
+
+**Request Body:**
+
+```json
+{
+    "device": {
+        "fingerprint": "sha256:abcd...", 
+        "platform": "WEB"
+    }
+}
+```
+
+### `GET /v1/users/{id}/devices/latest` – Get latest device for user
+
+Returns the most recently seen device based on access events.
+
+**Responses:** 200 (OK) | 404 (No device found for user)
+
+### Transaction Endpoints
+
+### `GET /v1/transactions/{id}` – Get transaction by ID
+
+**Responses:** 200 (OK) | 404 (Transaction not found)
+
+### `GET /v1/transactions` – List transactions
+
+**Query Params:**
+
+* `userId` - string, filter by user ID
+* `limit` - number, pagination limit
+* `offset` - number, pagination offset
+
+### `POST /v1/transactions` – Create transaction
+
+**Request Body:**
+
+```json
+{
+    "userId": "user-uuid",
+    "amount": 500,
+    "type": "ADD",
+    "reason": "REWARD"
+}
+```
+
+**Responses:** 201 (Created) | 400 (Missing required fields)
+
+### `PUT /v1/transactions/{id}` – Update transaction
+
+**Request Body:**
+
+```json
+{
+    "amount": 750,
+    "type": "SUBTRACT", 
+    "reason": "PURCHASE"
+}
+```
+
+**Responses:** 200 (OK) | 400 (Validation error) | 404 (Transaction not found)
+
+### `DELETE /v1/transactions/{id}` – Delete transaction
+
+**Responses:** 200 (OK) | 404 (Transaction not found)
+
+### User Transaction Endpoints
+
+### `GET /v1/users/{id}/transactions` – List transactions for a user
+
+**Query Params:**
+
+* `limit` - number, pagination limit
+* `offset` - number, pagination offset
+
+### `POST /v1/users/{id}/transactions` – Create transaction for a user
+
+**Request Body:**
+
+```json
+{
+    "amount": 500,
+    "type": "ADD",
+    "reason": "REWARD"
+}
+```
+
+### Access Event Endpoints
+
+### `GET /v1/access-events/{id}` – Get access event by ID
+
+**Responses:** 200 (OK) | 404 (Access event not found)
+
+### `GET /v1/access-events` – List access events
+
+**Query Params:**
+
+* `userId` - string, filter by user ID
+* `deviceId` - string, filter by device ID
+* `limit` - number, pagination limit
+* `offset` - number, pagination offset
+
+### `POST /v1/access-events` – Create access event
+
+**Request Body:**
+
+```json
+{
+    "userId": "user-uuid",
+    "deviceId": "device-uuid",
+    "ip": "192.168.1.1",
+    "country": "US"
+}
+```
+
+Only `userId` is required.
+
+**Responses:** 201 (Created) | 400 (Missing required fields)
+
+### `PUT /v1/access-events/{id}` – Update access event
+
+**Request Body:**
+
+```json
+{
+    "deviceId": "device-uuid",
+    "ip": "192.168.1.1", 
+    "country": "US"
+}
+```
+
+**Responses:** 200 (OK) | 400 (Validation error) | 404 (Access event not found)
+
+### `DELETE /v1/access-events/{id}` – Delete access event
+
+**Responses:** 200 (OK) | 404 (Access event not found)
+
+### User Access Event Endpoints
+
+### `GET /v1/users/{id}/access-events` – List access events for a user
+
+**Query Params:**
+
+* `limit` - number, pagination limit
+* `offset` - number, pagination offset
+
+### `POST /v1/users/{id}/access-events` – Create access event for a user
+
+**Request Body:**
+
+```json
+{
+    "deviceId": "device-uuid",
+    "ip": "192.168.1.1",
+    "country": "US"
+}
+```
+
+### API Documentation
+
+Interactive API documentation is available at `/docs` when the service is running. The OpenAPI specification can be accessed at `/docs.json`.
 
 ### Dependencies
 

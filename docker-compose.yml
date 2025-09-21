@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  # =================================================================
+  # APPLICATION SERVICES
+  # =================================================================
+
+  # User Management Service (Express.js + TypeScript)
+  user-management-service:
+    image: flexksx/mafia_user_management_service:latest
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3000/docs.json >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mafia-network
+
+  # Game Service (Express.js + TypeScript)
+  game-service:
+    image: flexksx/mafia_game_service:latest
+    restart: unless-stopped
+    depends_on:
+      - user-management-service
+    environment:
+      PORT: 3001
+      USER_SERVICE_URL: http://user-management-service:3000
+      NODE_ENV: production
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3001/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mafia-network
+
+# =================================================================
+# NETWORKS AND VOLUMES
+# =================================================================
+
+networks:
+  mafia-network:
+    driver: bridge
