@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # =================================================================
   # APPLICATION SERVICES
@@ -29,7 +27,7 @@ services:
 
   # Game Service (Express.js + TypeScript)
   game-service:
-    image: flexksx/mafia_game_service:latest
+    image: flexksx/mafia-game-service:latest
     restart: unless-stopped
     depends_on:
       - user-management-service
