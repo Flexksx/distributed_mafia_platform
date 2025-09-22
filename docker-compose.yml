@@ -38,6 +38,42 @@ services:
       retries: 5
     networks:
       - mafia-network
+  
+  # PostgreSQL for Task Service
+  task-service-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: task_service_user
+      POSTGRES_PASSWORD: task_service_secure_password
+      POSTGRES_DB: task_service_db
+    volumes:
+      - task_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U task_service_user -d task_service_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - mafia-network
+
+  # PostgreSQL for Voting Service
+  voting-service-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: voting_service_user
+      POSTGRES_PASSWORD: voting_service_secure_password
+      POSTGRES_DB: voting_service_db
+    volumes:
+      - voting_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voting_service_user -d voting_service_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - mafia-network
 
   # =================================================================
   # APPLICATION SERVICES
@@ -109,7 +145,80 @@ services:
       start_period: 60s
     networks:
       - mafia-network
+    
+  # Task Service (Express.js + TypeScript + Prisma)
+  task-service:
+    image: rayderr/mafia_liviu_task_service:latest
+    restart: unless-stopped
+    depends_on:
+      task-service-db:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+    environment:
+      PORT: 3002
+      NODE_ENV: production
+      DATABASE_URL: postgresql://task_service_user:task_service_secure_password@task-service-db:5432/task_service_db?schema=public
+      APP_PORT: 3002
+      JWT_SECRET: production-jwt-secret-change-me
+    ports:
+      - "3002:3002"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3002/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - mafia-network
+    # Run migrations as root, then switch to nodejs user for the app
+    user: root
+    command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
+  # Voting Service (Express.js + TypeScript + Prisma)
+  voting-service:
+    image: rayderr/mafia_liviu_voting_service:latest
+    restart: unless-stopped
+    depends_on:
+      voting-service-db:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+    environment:
+      PORT: 3003
+      NODE_ENV: production
+      DATABASE_URL: postgresql://voting_service_user:voting_service_secure_password@voting-service-db:5432/voting_service_db?schema=public
+      APP_PORT: 3003
+      JWT_SECRET: production-jwt-secret-change-me
+      TIE_BREAK_METHOD: RANDOM
+    ports:
+      - "3003:3003"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3003/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - mafia-network
+    # Run migrations as root, then switch to nodejs user for the app
+    user: root
+    command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
+    
 # =================================================================
 # NETWORKS AND VOLUMES
 # =================================================================
@@ -118,6 +227,10 @@ volumes:
   user_management_data:
     driver: local
   game_service_data:
+    driver: local
+  task_service_data:
+    driver: local
+  voting_service_data:
     driver: local
 
 networks:
