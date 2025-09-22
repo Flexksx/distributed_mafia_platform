@@ -95,7 +95,7 @@ interface UserAccessEvent {
 
 ### Endpoints
 
-Comprehensive REST API for user management, currency transactions, device tracking, and access event monitoring.
+User-centric REST API for user management, currency transactions, device tracking, and access event monitoring. All endpoints are organized around users as the primary resource.
 
 ### User Endpoints
 
@@ -172,41 +172,6 @@ interface UserBalance {
 }
 ```
 
-### Device Endpoints
-
-### `GET /v1/devices/{id}` – Get device by ID
-
-**Responses:** 200 (OK) | 404 (Device not found)
-
-### `GET /v1/devices` – List devices
-
-**Query Params:**
-
-* `userId` - string, filter by user ID
-* `fingerprint` - string, filter by device fingerprint
-* `limit` - number, pagination limit
-* `offset` - number, pagination offset
-
-### `POST /v1/devices` – Create device
-
-**Request Body:**
-
-```json
-{
-    "userId": "user-uuid",
-    "device": {
-        "fingerprint": "sha256:abcd...",
-        "platform": "WEB"
-    }
-}
-```
-
-**Responses:** 201 (Created) | 400 (Missing required fields)
-
-### `DELETE /v1/devices/{id}` – Delete device
-
-**Responses:** 200 (OK) | 404 (Device not found)
-
 ### User Device Endpoints
 
 ### `GET /v1/users/{id}/devices` – List devices for a user
@@ -215,72 +180,6 @@ interface UserBalance {
 
 * `limit` - number, pagination limit
 * `offset` - number, pagination offset
-
-### `POST /v1/users/{id}/devices` – Create device for a user
-
-**Request Body:**
-
-```json
-{
-    "device": {
-        "fingerprint": "sha256:abcd...", 
-        "platform": "WEB"
-    }
-}
-```
-
-### `GET /v1/users/{id}/devices/latest` – Get latest device for user
-
-Returns the most recently seen device based on access events.
-
-**Responses:** 200 (OK) | 404 (No device found for user)
-
-### Transaction Endpoints
-
-### `GET /v1/transactions/{id}` – Get transaction by ID
-
-**Responses:** 200 (OK) | 404 (Transaction not found)
-
-### `GET /v1/transactions` – List transactions
-
-**Query Params:**
-
-* `userId` - string, filter by user ID
-* `limit` - number, pagination limit
-* `offset` - number, pagination offset
-
-### `POST /v1/transactions` – Create transaction
-
-**Request Body:**
-
-```json
-{
-    "userId": "user-uuid",
-    "amount": 500,
-    "type": "ADD",
-    "reason": "REWARD"
-}
-```
-
-**Responses:** 201 (Created) | 400 (Missing required fields)
-
-### `PUT /v1/transactions/{id}` – Update transaction
-
-**Request Body:**
-
-```json
-{
-    "amount": 750,
-    "type": "SUBTRACT", 
-    "reason": "PURCHASE"
-}
-```
-
-**Responses:** 200 (OK) | 400 (Validation error) | 404 (Transaction not found)
-
-### `DELETE /v1/transactions/{id}` – Delete transaction
-
-**Responses:** 200 (OK) | 404 (Transaction not found)
 
 ### User Transaction Endpoints
 
@@ -303,55 +202,7 @@ Returns the most recently seen device based on access events.
 }
 ```
 
-### Access Event Endpoints
-
-### `GET /v1/access-events/{id}` – Get access event by ID
-
-**Responses:** 200 (OK) | 404 (Access event not found)
-
-### `GET /v1/access-events` – List access events
-
-**Query Params:**
-
-* `userId` - string, filter by user ID
-* `deviceId` - string, filter by device ID
-* `limit` - number, pagination limit
-* `offset` - number, pagination offset
-
-### `POST /v1/access-events` – Create access event
-
-**Request Body:**
-
-```json
-{
-    "userId": "user-uuid",
-    "deviceId": "device-uuid",
-    "ip": "192.168.1.1",
-    "country": "US"
-}
-```
-
-Only `userId` is required.
-
-**Responses:** 201 (Created) | 400 (Missing required fields)
-
-### `PUT /v1/access-events/{id}` – Update access event
-
-**Request Body:**
-
-```json
-{
-    "deviceId": "device-uuid",
-    "ip": "192.168.1.1", 
-    "country": "US"
-}
-```
-
-**Responses:** 200 (OK) | 400 (Validation error) | 404 (Access event not found)
-
-### `DELETE /v1/access-events/{id}` – Delete access event
-
-**Responses:** 200 (OK) | 404 (Access event not found)
+**Responses:** 201 (Created) | 400 (Missing required fields: amount and type) | 404 (User not found)
 
 ### User Access Event Endpoints
 
@@ -368,11 +219,17 @@ Only `userId` is required.
 
 ```json
 {
-    "deviceId": "device-uuid",
-    "ip": "192.168.1.1",
-    "country": "US"
+    "ipAddress": "192.168.1.1",
+    "country": "US",
+    "platform": "WEB",
+    "fingerprint": "optional-device-fingerprint"
 }
 ```
+
+Required fields: `ipAddress`, `country`, `platform`
+Optional fields: `fingerprint`
+
+**Responses:** 201 (Created) | 400 (Missing required fields: ipAddress, country, and platform) | 404 (User not found)
 
 ### API Documentation
 
@@ -383,6 +240,7 @@ Interactive API documentation is available at `/docs` when the service is runnin
 * PostgreSQL DB Container
 * Password hashing lib (argon2/bcrypt)
 * (Optional later) Message broker for events
+
 
 ## Game service
 
