@@ -297,9 +297,9 @@ Errors: 409 (lobby full or already joined).
 
 ### Tech stack
 
-* **Framework/language:** Java + Spring Boot (enterprise-grade reliability for financial transactions, strong typing for currency operations, third language requirement)
+* **Framework/language:** C# + ASP.NET Core Web API (enterprise-grade reliability for financial transactions, strong typing for currency operations, excellent performance for microservices)
 * **Database:** MongoDB (flexible document storage for varied rumor data structures, easy schema evolution)
-* **Other:** Redis for caching expensive rumor generation, JWT for authentication
+* **Other:** MongoDB.Driver for C#, Redis for caching expensive rumor generation, JWT Bearer authentication
 * **Communication pattern:** REST API with other services, async processing for rumor generation
 
 ### Service Diagram
@@ -311,7 +311,7 @@ config:
 ---
 flowchart TD
  subgraph subGraph0["Mafia Application"]
-        B("Rumors Service <br> Java + Spring Boot")
+        B("Rumors Service <br> C# + ASP.NET Core")
         A["Client / Other Services"]
   end
  subgraph subGraph2["Data Persistence"]
@@ -329,25 +329,27 @@ flowchart TD
 
 ### Schema
 
-```java
-public class Rumor {
-    private String id;
-    private String buyerId;
-    private String targetPlayerId;
-    private String informationType; // "TASK", "APPEARANCE", "INVENTORY"
-    private String content;
-    private Double accuracy; // 0.0 to 1.0
-    private Integer cost;
-    private List<String> availableToRoles;
-    private LocalDateTime purchasedAt;
+```csharp
+public class Rumor
+{
+    public string Id { get; set; }
+    public string BuyerId { get; set; }
+    public string TargetPlayerId { get; set; }
+    public string InformationType { get; set; } // "TASK", "APPEARANCE", "INVENTORY"
+    public string Content { get; set; }
+    public double Accuracy { get; set; } // 0.0 to 1.0
+    public int Cost { get; set; }
+    public List<string> AvailableToRoles { get; set; }
+    public DateTime PurchasedAt { get; set; }
 }
 
-public class RumorTemplate {
-    private String id;
-    private String template; // "Player {name} was seen {action}"
-    private String sourceService;
-    private List<String> roleRestrictions;
-    private Integer baseCost;
+public class RumorTemplate
+{
+    public string Id { get; set; }
+    public string Template { get; set; } // "Player {name} was seen {action}"
+    public string SourceService { get; set; }
+    public List<string> RoleRestrictions { get; set; }
+    public int BaseCost { get; set; }
 }
 ```
 
@@ -379,7 +381,7 @@ Returns user's rumor purchase history.
 
 * MongoDB container
 * Redis container  
-* Java Spring Boot runtime
+* .NET 8 runtime
 * Integration with User Management Service (currency deduction)
 * Integration with Task Service (task data)
 * Integration with Character Service (appearance data)
@@ -390,10 +392,10 @@ Returns user's rumor purchase history.
 
 ### Tech stack
 
-* **Framework/language:** Java + Spring Boot (consistent with Rumors Service, WebSocket support, enterprise reliability for real-time messaging)
+* **Framework/language:** C# + ASP.NET Core Web API with SignalR (excellent WebSocket support, real-time messaging capabilities, enterprise reliability)
 * **Database:** PostgreSQL (ACID compliance for chat history, consistent with other services)
-* **Other:** WebSocket for real-time messaging, Redis pub/sub for message broadcasting
-* **Communication pattern:** REST + WebSocket APIs, event-driven messaging
+* **Other:** SignalR for real-time messaging, Redis for message broadcasting and scaling, Npgsql for PostgreSQL connectivity
+* **Communication pattern:** REST + SignalR APIs, event-driven messaging
 
 ### Service Diagram
 
@@ -404,14 +406,14 @@ config:
 ---
 flowchart TD
  subgraph subGraph0["Mafia Application"]
-        B("Communication Service <br> Java + Spring Boot")
+        B("Communication Service <br> C# + ASP.NET Core + SignalR")
         A["Client / Other Services"]
   end
  subgraph subGraph2["Data Persistence"]
         D[("PostgreSQL Database")]
-        E[("Redis Pub/Sub")]
+        E[("Redis Backplane")]
   end
-    A -- HTTP/REST + WebSocket --> B
+    A -- HTTP/REST + SignalR --> B
     B -- Real-time Messages --> A
     B -- Reads/Writes chat data --> D
     B -- Message broadcasting --> E
@@ -422,23 +424,25 @@ flowchart TD
 
 ### Schema
 
-```java
-public class ChatMessage {
-    private String id;
-    private String senderId;
-    private String channelId;
-    private String content;
-    private String type; // "GLOBAL", "MAFIA", "LOCATION"
-    private LocalDateTime timestamp;
+```csharp
+public class ChatMessage
+{
+    public string Id { get; set; }
+    public string SenderId { get; set; }
+    public string ChannelId { get; set; }
+    public string Content { get; set; }
+    public string Type { get; set; } // "GLOBAL", "MAFIA", "LOCATION"
+    public DateTime Timestamp { get; set; }
 }
 
-public class ChatChannel {
-    private String id;
-    private String type;
-    private String name;
-    private String locationId; // optional for location-based chats
-    private List<String> participants;
-    private Boolean isActive;
+public class ChatChannel
+{
+    public string Id { get; set; }
+    public string Type { get; set; }
+    public string Name { get; set; }
+    public string LocationId { get; set; } // optional for location-based chats
+    public List<string> Participants { get; set; }
+    public bool IsActive { get; set; }
 }
 ```
 
@@ -470,15 +474,15 @@ Body:
 
 Returns messages for specific channel.
 
-#### `WS v1/chat/ws` – WebSocket connection for real-time messaging
+#### SignalR Hub: `/chathub` – Real-time messaging connection
 
-WebSocket endpoint for real-time message delivery.
+SignalR hub for real-time message delivery and channel management.
 
 ### Dependencies
 
 * PostgreSQL DB container
 * Redis container
-* Java Spring Boot runtime
-* WebSocket support
+* .NET 8 runtime
+* SignalR support
 * Integration with Game Service (voting hours, game state)
 * Integration with User Management Service (user roles, authentication)
