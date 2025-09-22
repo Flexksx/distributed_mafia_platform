@@ -1898,18 +1898,54 @@ curl http://localhost:3001/health
 3. Run test workflows to demonstrate functionality
 
 
-# Voting Service
+# Voting Service - Mafia Game Platform
 
-* **Core responsibility:** Manage the evening vote. Open voting sessions, collect one vote per eligible player, tally results, resolve ties, and return the exiled player to the Game Service.
+**Core responsibility:** Manage evening voting sessions. Open voting windows, collect one vote per eligible player, tally results, resolve ties, and return the exiled player information to the Game Service.
 
-### Tech stack
+## Docker Hub Images
 
-* **Framework/language:** Java + Spring Boot (strong concurrency support, production-grade for voting logic).  
-* **Database:** PostgreSQL (ensures durability of votes, supports tally queries).  
-* **Other:** Spring Data JPA (ORM), Jackson (JSON), Spring Security (for role-based access).  
-* **Communication pattern:** REST API (JSON over HTTP) for synchronous operations. Future extension: publish `player.exiled` events via a broker.
+**Published on Docker Hub:**
+- `rayderr/mafia_liviu_voting_service:1.0.6` - Multi-platform support (Windows/Mac/Linux)
+- `rayderr/mafia_liviu_voting_service:latest` - Latest build
 
-### Service Diagram
+## Quick Start with Docker (Recommended)
+
+### Prerequisites
+- Docker & Docker Compose installed
+- No Node.js or local setup needed!
+- Works on Windows, macOS (Intel/M1/M2), and Linux
+
+### Run from Docker Hub
+```bash
+# Start PostgreSQL database
+docker run -d --name voting-db \
+  -e POSTGRES_USER=voting_user \
+  -e POSTGRES_PASSWORD=secure_password_123 \
+  -e POSTGRES_DB=voting_service_db \
+  -p 5002:5432 \
+  postgres:16-alpine
+
+# Run Voting Service from Docker Hub
+docker run -d --name voting-service \
+  -p 3002:3002 \
+  -e DATABASE_URL="postgresql://voting_user:secure_password_123@voting-db:5432/voting_service_db" \
+  --link voting-db \
+  rayderr/mafia_liviu_voting_service:latest
+
+# Verify it's working
+curl http://localhost:3002/health
+```
+
+## Tech Stack
+
+- **Framework/Language:** TypeScript + Express.js (excellent concurrency support, production-grade for voting logic)
+- **Database:** PostgreSQL (ensures vote durability and supports complex tally queries)
+- **ORM:** Prisma (type-safe database operations, transaction support)
+- **Validation:** Zod (runtime validation for vote requests)
+- **Real-time:** Socket.io (optional - for live vote count updates)
+- **Authentication:** JWT middleware for request authorization
+- **Communication:** REST API (JSON over HTTP) for synchronous operations
+## Service Architecture
 
 ```mermaid
 flowchart TD
@@ -1922,97 +1958,471 @@ flowchart TD
   end
 
   subgraph Voting
-    V[Voting Service <br/> Java + Spring Boot]
+    V[Voting Service <br/> TypeScript + Express]
   end
 
-  P -->|Cast vote| V
-  G -->|Evening start + eligible list| V
-  V -->|Exiled result| G
+  P -->|Cast votes| V
+  G -->|Open voting + eligible players| V
+  V -->|Return exile result| G
+
 ```
 
-## Schema
-```java
-class VoteWindow {
-    UUID id;
-    int day;
-    boolean open;
-    LocalDateTime openedAt;
-    LocalDateTime closedAt;
+## API Endpoints
+
+### Interactive Documentation
+**Swagger UI:** http://localhost:3002/docs
+
+### Main Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/votes/open` | Open a voting window |
+| POST | `/api/v1/votes` | Cast a vote |
+| GET | `/api/v1/votes/status/{day}` | Get voting status |
+| POST | `/api/v1/votes/close` | Close window and compute results |
+| GET | `/api/v1/votes/history/{day}` | Get voting history for day |
+| GET | `/api/v1/votes/active` | Get current active window |
+| GET | `/api/v1/votes/user/{userId}` | Get user vote history |
+| GET | `/api/v1/votes/results` | Get voting results |
+| GET | `/api/v1/votes/statistics` | Get overall statistics |
+
+### Example Requests
+
+**Open Voting Window:**
+```bash
+curl -X POST http://localhost:3002/api/v1/votes/open \
+  -H "Content-Type: application/json" \
+  -d '{
+    "day": 1,
+    "eligibleVoters": ["player1", "player2", "player3"],
+    "eligibleTargets": ["player1", "player2", "player3"]
+  }'
+```
+
+**Cast Vote:**
+```bash
+curl -X POST http://localhost:3002/api/v1/votes \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: unique-key-123" \
+  -d '{
+    "day": 1,
+    "voterId": "player1",
+    "targetUserId": "player2"
+  }'
+```
+
+## Features
+
+### Core Voting Functionality
+- **Voting Windows**: Time-boxed voting sessions per game day
+- **Eligibility Management**: Define who can vote and who can be voted for
+- **Vote Casting**: One vote per player per day with validation
+- **Result Computation**: Automatic winner determination
+- **Tie Breaking**: Configurable strategies (RANDOM, ELDEST, NO_EXILE)
+
+### Advanced Features
+- **Idempotency**: Prevent duplicate votes with idempotency keys
+- **Real-time Status**: Track voting progress without revealing individual votes
+- **Vote History**: Complete audit trail for all voting activities
+- **Statistics**: Aggregate voting metrics and trends
+- **Event Logging**: Comprehensive event tracking for debugging
+
+## Architecture
+
+```
+voting-service/
+├── src/
+│   ├── domain/
+│   │   └── voting/
+│   │       └── service/
+│   │           └── VotingService.ts    # Core business logic
+│   └── server/
+│       ├── index.ts                    # Express server setup
+│       └── routes/
+│           └── index.ts                 # API route handlers
+├── prisma/
+│   ├── schema.prisma                   # Database schema
+│   └── seed.ts                         # Seed data script
+├── tests/
+│   ├── voting.test.ts                  # Integration tests
+│   ├── service.test.ts                 # Unit tests
+│   └── setup.ts                        # Test configuration
+├── swagger.yaml                        # OpenAPI specification
+├── Dockerfile                          # Multi-stage Docker build
+├── docker-compose.yml                  # Container orchestration
+└── package.json                        # Dependencies & scripts
+```
+
+## Database Schema
+
+### Core Models (Prisma)
+
+```prisma
+model VoteWindow {
+  id              String    @id @default(uuid())
+  day             Int       @unique
+  isOpen          Boolean   @default(true)
+  eligibleVoters  String[]  // Array of user IDs who can vote
+  eligibleTargets String[]  // Array of user IDs who can be voted for
+  openedAt        DateTime  @default(now())
+  closedAt        DateTime?
+
+  votes           Vote[]
+  result          VoteResult?
+  
+  @@map("vote_windows")
 }
 
-class Vote {
-    UUID id;
-    UUID voterId;
-    UUID targetUserId;
-    int day;
-    LocalDateTime createdAt;
+model Vote {
+  id           String   @id @default(uuid())
+  voterId      String
+  targetUserId String
+  day          Int
+  createdAt    DateTime @default(now())
+
+  voteWindow   VoteWindow @relation(fields: [day], references: [day])
+
+  @@unique([voterId, day]) // One vote per voter per day
+  @@map("votes")
 }
 
-class VoteResult {
-    UUID id;
-    int day;
-    UUID exiledUserId;
-    String tieBreakMethod;  // e.g., NONE, RANDOM
-    LocalDateTime createdAt;
+model VoteResult {
+  id             String   @id @default(uuid())
+  day            Int      @unique
+  exiledUserId   String?  // null if tie couldn't be resolved
+  totalVotes     Int
+  winningVotes   Int
+  tieBreakMethod String?  // RANDOM, ELDEST, etc.
+  voteCounts     Json     // Detailed vote breakdown
+  createdAt      DateTime @default(now())
+  voteWindow     VoteWindow @relation(fields: [day], references: [day])
+
+  @@map("vote_results")
+}
+
+model VoteEvent {
+  id          String   @id @default(uuid())
+  day         Int
+  eventType   String   // WINDOW_OPENED, VOTE_CAST, etc.
+  metadata    Json
+  createdAt   DateTime @default(now())
+
+  @@map("vote_events")
+}
+
+model VotingConfiguration {
+  id             String   @id @default(uuid())
+  tieBreakMethod String   @default("RANDOM")
+  voteDuration   Int      @default(120) // minutes
+  updatedAt      DateTime @updatedAt
+
+  @@map("voting_configuration")
 }
 ```
-## Endpoints
-`POST v1/votes/open` – Start a new voting session
-Request
-```json
-{ "day": 12, "eligiblePlayers": ["uuid1", "uuid2"], "eligibleTargets": ["uuid3","uuid4"] }
+
+## Testing
+
+### 1. API Testing with Postman (Recommended)
+1. Import `voting-service.postman_collection.json`
+2. Set `baseUrl` to `http://localhost:3002`
+3. Run the collection or individual requests
+4. Use the "Workflows" folder for complete voting flow testing
+
+**Important:** The 400 errors like "VOTE_ALREADY_OPEN" or "ALREADY_VOTED" are **correct behavior**, not bugs! They prevent duplicate operations.
+
+### 2. Interactive Testing with Swagger UI
+Open in browser: http://localhost:3002/docs
+- Try out all endpoints directly in the browser
+- See request/response examples
+- Test with different parameters
+
+### 3. Quick API Tests with cURL
+```bash
+# Health check
+curl http://localhost:3002/health
+
+# Open voting window
+curl -X POST http://localhost:3002/api/v1/votes/open \
+  -H "Content-Type: application/json" \
+  -d '{"day": 1, "eligibleVoters": ["user1", "user2"], "eligibleTargets": ["user1", "user2"]}'
+
+# Cast a vote
+curl -X POST http://localhost:3002/api/v1/votes \
+  -H "Content-Type: application/json" \
+  -d '{"day": 1, "voterId": "user1", "targetUserId": "user2"}'
+
+# Get voting status
+curl http://localhost:3002/api/v1/votes/status/1
 ```
-Response 200
-```json
-{ "day": 12, "status": "OPEN", "closesAt": "2025-09-07T20:00:00Z" }
+
+### 4. Unit Testing
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage (>80% statement coverage)
+npm run test:coverage
+
+# Run specific test suite
+npm run test:unit
+
+# Run in watch mode
+npm run test:watch
 ```
-Errors
-```json
-{ "error": { "code": "VOTE_ALREADY_OPEN", "message": "A vote is already active" } }
+
+### 5. Test Scripts
+```bash
+# Quick test script - health checks and status
+./test.sh --quick
+
+# Comprehensive test script - full API testing
+./test.sh --full
+
+# Unit tests only
+./test.sh --unit
+
+# Integration tests only
+./test.sh --integration
 ```
-`POST v1/votes` – Cast a vote
-Headers: `Idempotency-Key: string`
-Request
-```json
-{ "day": 12, "voterId": "uuid1", "targetUserId": "uuid2" }
+
+### 6. Docker Testing
+```bash
+# Ensure service is running
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f voting-service
+
+# Run tests in container
+docker exec voting-service npm test
 ```
-Response 200
-```json
-{ "accepted": true, "voteId": "uuid" }
+
+### 7. Reset for Fresh Testing
+```bash
+# Reset database with seed data
+docker exec voting-service npm run db:seed
+
+# Or start with different day numbers (Day 2, 3, etc.) instead of Day 1
 ```
-Errors
-```json
-{ "error": { "code": "ALREADY_VOTED", "message": "Voter already cast a vote" } }
+
+## Data Ownership
+
+This service owns:
+- `vote_windows` - Voting session definitions
+- `votes` - Individual player votes
+- `vote_results` - Computed voting outcomes
+- `vote_events` - Audit trail for all voting activities
+- `voting_configuration` - System-wide voting parameters
+
+## Voting Rules & Logic
+
+### Tie Breaking
+When multiple players receive the same highest vote count:
+1. **RANDOM**: Randomly select one of the tied players
+2. **ELDEST**: Exile the player who joined the game earliest
+3. **NO_EXILE**: If configured, no one gets exiled on ties
+
+### Vote Validation
+- Each player can cast exactly one vote per day
+- Players can only vote for eligible targets
+- Votes cannot be changed once cast
+- Voting window must be open
+
+## Deployment Instructions
+
+### Cross-Platform Deployment (Windows/Mac/Linux)
+
+**Option A: Using Docker Compose (Recommended)**
+```bash
+# Clone repository
+git clone <repository>
+cd voting-service
+
+# Start services
+docker-compose up -d
+
+# Verify it's working
+curl http://localhost:3002/health
+# Or open browser: http://localhost:3002/docs
 ```
-`POST v1/votes/close` – Close voting and compute result
-Request
-```json
-{ "day": 12 }
+
+**Option B: Using Published Docker Image**
+```bash
+# Pull latest image
+docker pull rayderr/mafia_liviu_voting_service:latest
+
+# Run with docker-compose
+docker-compose up -d
 ```
-Response 200
-```json
-{
-  "day": 12,
-  "exiledUserId": "uuid2",
-  "counts": [
-    { "userId": "uuid2", "votes": 5 },
-    { "userId": "uuid3", "votes": 3 }
-  ],
-  "tieBreakMethod": "RANDOM"
-}
+
+### Windows-Specific Instructions
+```powershell
+# Using PowerShell or Command Prompt
+docker-compose up -d
+
+# Check health (PowerShell)
+Invoke-RestMethod http://localhost:3002/health
 ```
-Errors
-```json
-{ "error": { "code": "NOT_OPEN", "message": "No vote is currently active" } }
+
+### macOS/Linux Instructions
+```bash
+# Standard Docker commands work
+docker-compose up -d
+curl http://localhost:3002/health
+```
+
+### Testing the Service
+1. Open Swagger UI: http://localhost:3002/docs
+2. Import Postman collection from `/postman` folder or `VotingService.postman_collection.json`
+3. Run test workflows to demonstrate functionality
+
+## Testing Scripts
+
+- `./test.sh` - Comprehensive test runner with options
+- `./run.sh` - Service startup script with Docker support
+
+## Production Deployment
+
+### Requirements
+- Docker and Docker Compose installed
+- Environment configuration file (copy from `.env.example`)
+
+### Deployment Steps
+
+1. **Prepare environment file**
+   - Copy `.env.example` to `.env`
+   - Update passwords and secrets
+
+2. **Start the service**
+   ```bash
+   docker pull rayderr/mafia_liviu_voting_service:1.0.6
+   docker-compose up -d
+   ```
+
+3. **Verify deployment**
+   ```bash
+   curl http://localhost:3002/health
+   ```
+
+### Service Management
+
+**View logs:**
+```bash
+docker-compose logs -f voting-service
+```
+
+**Restart service:**
+```bash
+docker-compose restart voting-service
+```
+
+**Stop service:**
+```bash
+docker-compose down
+```
+
+**Backup database:**
+```bash
+docker exec voting-service-db pg_dump -U voting_user voting_service_db > backup.sql
+```
+
+## Environment Setup
+
+Create `.env` file:
+```env
+# Database
+DATABASE_URL="postgresql://username:password@localhost:5432/voting_service_db"
+
+# Server
+PORT=3002
+NODE_ENV=development
+
+# JWT
+JWT_SECRET=your-secret-key
+
+# External Services
+GAME_SERVICE_URL=http://localhost:3000
+USER_SERVICE_URL=http://localhost:3003
+
+# Voting Configuration
+VOTE_DURATION_MINUTES=120
+TIE_BREAK_METHOD=RANDOM
+```
+
+## Running the Service
+
+```bash
+# Install dependencies
+npm install
+
+# Generate Prisma client and run migrations
+npm run db:setup
+
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+
+# Build for production
+npm run build
+npm start
 ```
 
 ## Dependencies
-- Game Service: opens/closes vote windows, receives exile result.
-- Clients (Players): cast votes via this service.
 
-## Data ownership:
-This service exclusively manages `vote_windows`, `votes`, and `vote_results`. No other service writes to this DB.
+- **Game Service:** Opens/closes voting windows, receives exile results
+- **User Management Service:** Validates eligible players
+- **Client Applications:** Players cast votes through web/mobile interfaces
 
+## Additional Development Information
+
+### Available Scripts
+
+```bash
+# Development
+npm run dev          # Start with hot reload
+npm run build        # Build TypeScript
+npm run lint         # Run ESLint
+npm run format       # Format with Prettier
+
+# Database
+npm run prisma:generate  # Generate Prisma client
+npm run prisma:migrate  # Run migrations
+npm run prisma:studio    # Open Prisma Studio
+npm run db:seed         # Seed database
+npm run db:setup        # Generate + migrate + seed
+
+# Testing
+npm test                # Run tests
+npm run test:watch      # Watch mode
+npm run test:coverage   # Coverage report
+
+# Production
+npm start              # Start production server
+npm run start:prod     # Start with PM2
+```
+
+### Monitoring
+
+**Health Endpoints:**
+- `/health` - Service status and uptime
+- `/health/database` - Database connectivity
+
+**Metrics Tracked:**
+- Total voting sessions
+- Votes cast per session
+- Players exiled
+- Average participation rates
+
+### Security Features
+
+- **Input Validation**: All inputs sanitized
+- **SQL Injection Prevention**: Prisma parameterized queries
+- **CORS Configuration**: Controlled cross-origin access
+- **Rate Limiting Ready**: Infrastructure for rate limits
+- **JWT Authentication Ready**: Token validation support
+- **Idempotency**: Prevent duplicate operations
 
 # Town Service
 
