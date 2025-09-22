@@ -105,31 +105,33 @@ create_users() {
     done
 }
 
-# Create devices for users
+# Create devices for users (via access events)
 create_devices() {
-    print_message $BLUE "📱 Creating devices for users..."
+    print_message $BLUE "📱 Creating devices for users via access events..."
     
     for user_id in "${CREATED_USERS[@]}"; do
-        # Create 1-3 devices per user
+        # Create 1-3 unique devices per user
         num_devices=$((RANDOM % 3 + 1))
         
         for j in $(seq 1 $num_devices); do
             fingerprint=$(generate_fingerprint)
             platform=$(generate_platform)
+            ip=$(generate_ip)
+            country=$(generate_country)
             
-            response=$(curl -s -w "%{http_code}" -X POST "$USER_SERVICE_URL/v1/users/$user_id/devices" \
+            response=$(curl -s -w "%{http_code}" -X POST "$USER_SERVICE_URL/v1/users/$user_id/access-events" \
                 -H "Content-Type: application/json" \
                 -d "{
-                    \"device\": {
-                        \"fingerprint\": \"$fingerprint\",
-                        \"platform\": \"$platform\"
-                    }
+                    \"ipAddress\": \"$ip\",
+                    \"country\": \"$country\",
+                    \"platform\": \"$platform\",
+                    \"fingerprint\": \"$fingerprint\"
                 }")
             
             http_code="${response: -3}"
             
             if [ "$http_code" = "201" ]; then
-                print_message $GREEN "   ✅ Created $platform device for user $user_id"
+                print_message $GREEN "   ✅ Created $platform device for user $user_id via access event"
             else
                 print_message $RED "   ❌ Failed to create device for user $user_id: HTTP $http_code"
             fi
@@ -178,21 +180,30 @@ create_transactions() {
 
 # Create access events for users
 create_access_events() {
-    print_message $BLUE "🔐 Creating access events..."
+    print_message $BLUE "🔐 Creating additional access events..."
     
     for user_id in "${CREATED_USERS[@]}"; do
-        # Create 5-15 access events per user
-        num_events=$((RANDOM % 11 + 5))
+        # Create 3-8 additional access events per user (devices already created above)
+        num_events=$((RANDOM % 6 + 3))
         
         for j in $(seq 1 $num_events); do
             ip=$(generate_ip)
             country=$(generate_country)
+            platform=$(generate_platform)
+            # Sometimes include fingerprint, sometimes don't (to simulate returning vs new devices)
+            if [ $((RANDOM % 3)) -eq 0 ]; then
+                fingerprint=$(generate_fingerprint)
+                fingerprint_json=", \"fingerprint\": \"$fingerprint\""
+            else
+                fingerprint_json=""
+            fi
             
             response=$(curl -s -w "%{http_code}" -X POST "$USER_SERVICE_URL/v1/users/$user_id/access-events" \
                 -H "Content-Type: application/json" \
                 -d "{
-                    \"ip\": \"$ip\",
-                    \"country\": \"$country\"
+                    \"ipAddress\": \"$ip\",
+                    \"country\": \"$country\",
+                    \"platform\": \"$platform\"$fingerprint_json
                 }")
             
             http_code="${response: -3}"
@@ -217,14 +228,17 @@ get_summary() {
     print_message $YELLOW "📈 Seeding Summary:"
     print_message $GREEN "   👥 Users created: $user_count"
     
-    # Show sample user balances
+    # Show sample user balances and device counts
     print_message $YELLOW "💰 Sample User Balances:"
+    print_message $YELLOW "📱 Sample Device Counts:"
     for user_id in "${CREATED_USERS[@]:0:5}"; do
         balance_response=$(curl -s "$USER_SERVICE_URL/v1/users/$user_id/balance")
+        devices_response=$(curl -s "$USER_SERVICE_URL/v1/users/$user_id/devices")
         if [ $? -eq 0 ]; then
             balance=$(echo "$balance_response" | grep -o '"balance":[0-9]*' | cut -d':' -f2)
             total_transactions=$(echo "$balance_response" | grep -o '"totalTransactions":[0-9]*' | cut -d':' -f2)
-            print_message $GREEN "   User $user_id: $balance credits ($total_transactions transactions)"
+            device_count=$(echo "$devices_response" | grep -o '"id"' | wc -l)
+            print_message $GREEN "   User $user_id: $balance credits ($total_transactions transactions, $device_count devices)"
         fi
     done
 }

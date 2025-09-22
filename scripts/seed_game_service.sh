@@ -95,7 +95,7 @@ create_lobbies() {
     for i in $(seq 1 $NUM_LOBBIES); do
         lobby_name=$(generate_lobby_name)
         
-        response=$(curl -s -w "%{http_code}" -X POST "$GAME_SERVICE_URL/v1/lobbies" \
+        response=$(curl -s -w "%{http_code}" -X POST "$GAME_SERVICE_URL/v1/lobby" \
             -H "Content-Type: application/json" \
             -d "{
                 \"name\": \"$lobby_name\"
@@ -150,7 +150,7 @@ add_players_to_lobbies() {
             
             career=$(generate_career)
             
-            response=$(curl -s -w "%{http_code}" -X POST "$GAME_SERVICE_URL/v1/lobbies/$lobby_id/join" \
+            response=$(curl -s -w "%{http_code}" -X POST "$GAME_SERVICE_URL/v1/lobby/$lobby_id/players" \
                 -H "Content-Type: application/json" \
                 -d "{
                     \"userId\": \"$user_id\",
@@ -159,11 +159,16 @@ add_players_to_lobbies() {
                 }")
             
             http_code="${response: -3}"
+            response_body="${response%???}"
             
             if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
                 print_message $GREEN "   ✅ Added $role player ($career) to lobby $lobby_id"
             else
+                # Show more detailed error for debugging
                 print_message $RED "   ❌ Failed to add player $user_id to lobby $lobby_id: HTTP $http_code"
+                if [ ! -z "$response_body" ] && [ "$response_body" != "<!DOCTYPE html>" ]; then
+                    print_message $YELLOW "      Error: $response_body"
+                fi
             fi
         done
     done
@@ -181,11 +186,12 @@ get_summary() {
     # Show sample lobby information
     print_message $YELLOW "🏛️ Sample Lobby Status:"
     for lobby_id in "${CREATED_LOBBIES[@]:0:3}"; do
-        lobby_response=$(curl -s "$GAME_SERVICE_URL/v1/lobbies/$lobby_id")
+        lobby_response=$(curl -s "$GAME_SERVICE_URL/v1/lobby/$lobby_id")
+        players_response=$(curl -s "$GAME_SERVICE_URL/v1/lobby/$lobby_id/players")
         if [ $? -eq 0 ]; then
             lobby_name=$(echo "$lobby_response" | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
             status=$(echo "$lobby_response" | grep -o '"currentStatus":"[^"]*"' | cut -d'"' -f4)
-            player_count=$(echo "$lobby_response" | grep -o '"userId"' | wc -l)
+            player_count=$(echo "$players_response" | grep -o '"userId"' | wc -l)
             print_message $GREEN "   $lobby_name: $status | $player_count players"
         fi
     done

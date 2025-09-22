@@ -137,7 +137,7 @@ display_summary() {
     print_message $YELLOW "   curl $USER_SERVICE_URL/v1/users"
     
     if curl -s "$GAME_SERVICE_URL/health" > /dev/null 2>&1; then
-        print_message $YELLOW "   curl $GAME_SERVICE_URL/v1/lobbies"
+        print_message $YELLOW "   curl $GAME_SERVICE_URL/v1/lobby"
     fi
 }
 
