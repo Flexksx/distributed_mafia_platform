@@ -1440,16 +1440,52 @@ WebSocket endpoint for real-time message delivery.
 
 # Task Service
 
-* **Core responsibility:** Assign daily tasks at the start of the day based on each player’s role and career. Track completion of those tasks, reward in-game currency, and optionally generate rumors that influence the game narrative.
+**Core responsibility:** Assign daily tasks at the start of the day based on each player's role and career. Track completion of those tasks, reward in-game currency, and optionally generate rumors that influence the game narrative.
 
-### Tech stack
+## Docker Hub Images
 
-* **Framework/language:** Java + Spring Boot (strong ecosystem, great support for REST APIs, built-in validation/security features).  
-* **Database:** PostgreSQL (transactional safety for task assignment and reward crediting).  
-* **Other:** Spring Data JPA (ORM), Spring Security (for authentication/authorization), Jackson (JSON serialization).  
-* **Communication pattern:** REST API (JSON over HTTP) between services. Optionally event publishing (e.g., `rumor.created`) to a message broker in future extensions.
+**Published on Docker Hub:**
+- `rayderr/mafia_liviu_task_service:1.0.6` - Multi-platform support (Windows/Mac/Linux)
+- `rayderr/mafia_liviu_task_service:latest` - Latest build
 
-### Service Diagram
+## Quick Start with Docker (Recommended)
+
+### Prerequisites
+- Docker & Docker Compose installed
+- No Node.js or local setup needed!
+- Works on Windows, macOS (Intel/M1/M2), and Linux
+
+### Run from Docker Hub
+```bash
+# Start PostgreSQL database
+docker run -d --name task-db \
+  -e POSTGRES_USER=task_user \
+  -e POSTGRES_PASSWORD=secure_password_123 \
+  -e POSTGRES_DB=task_service_db \
+  -p 5001:5432 \
+  postgres:16-alpine
+
+# Run Task Service from Docker Hub
+docker run -d --name task-service \
+  -p 3001:3001 \
+  -e DATABASE_URL="postgresql://task_user:secure_password_123@task-db:5432/task_service_db" \
+  --link task-db \
+  rayderr/mafia_liviu_task_service:latest
+
+# Verify it's working
+curl http://localhost:3001/health
+```
+
+## Tech Stack
+
+- **Framework/Language:** TypeScript + Express.js (lightweight, fast development, excellent ecosystem for REST APIs)
+- **Database:** PostgreSQL (transactional safety for task assignment and reward crediting)
+- **ORM:** Prisma (type-safe database access, automatic migrations, great TypeScript integration)
+- **Validation:** Zod (runtime type validation for API requests)
+- **Authentication:** JWT middleware for request authorization
+- **Communication:** REST API (JSON over HTTP) between services
+
+## Service Architecture
 
 ```mermaid
 flowchart TD
@@ -1462,7 +1498,7 @@ flowchart TD
   end
 
   subgraph Task
-    T[Task Service <br/> Java + Spring Boot]
+    T[Task Service <br/> TypeScript + Express]
   end
 
   subgraph User
@@ -1473,86 +1509,215 @@ flowchart TD
   G -->|Day start signal| T
   T -->|Reward currency| U
 ```
-### Schema
-```java
-enum TaskStatus {
-    ASSIGNED,
-    COMPLETED,
-    FAILED
+
+## API Endpoints
+
+### Interactive Documentation
+**Swagger UI:** http://localhost:3001/docs
+
+### Main Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/tasks/day/start` | Start new day and assign tasks |
+| GET | `/api/v1/tasks/user/{userId}` | Get user's tasks |
+| POST | `/api/v1/tasks/{id}/start` | Start a task |
+| POST | `/api/v1/tasks/{id}/complete` | Complete task |
+| POST | `/api/v1/tasks/{id}/fail` | Fail a task |
+| GET | `/api/v1/tasks/day/{day}/stats` | Day statistics |
+| POST | `/api/v1/tasks/day/{day}/end` | End day and expire tasks |
+| GET | `/api/v1/definitions` | List task definitions |
+| POST | `/api/v1/definitions` | Create task definition |
+| PATCH | `/api/v1/definitions/{id}` | Update task definition |
+| DELETE | `/api/v1/definitions/{id}` | Delete task definition |
+| GET | `/api/v1/rumors/day/{day}` | Get day rumors |
+| GET | `/api/v1/rumors/user/{userId}` | Get user rumors |
+
+### Example Requests
+
+**Start Day 2 (Day 1 has seed data):**
+```bash
+curl -X POST http://localhost:3001/api/v1/tasks/day/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "day": 2,
+    "activeUsers": [
+      {"userId": "user-1", "role": "doctor"},
+      {"userId": "user-2", "role": "teacher"}
+    ]
+  }'
+```
+
+**Get User Tasks:**
+```bash
+curl "http://localhost:3001/api/v1/tasks/user/user-1?day=2"
+```
+
+## Database Schema
+
+### Core Models (Prisma)
+
+```prisma
+model TaskDefinition {
+  id              String   @id @default(uuid())
+  role            String   // Target role (doctor, teacher, ANY)
+  title           String
+  description     String
+  requirementType TaskRequirementType
+  rewardAmount    Int
+  difficulty      Int      // 1-5 scale
+  isActive        Boolean
 }
 
-class TaskDefinition {
-    UUID id;
-    String role;            // role/career that receives this task
-    String description;     
-    String requirementType; // e.g., VISIT, USE_ITEM, INTERACT
+model DailyTaskAssignment {
+  id               String     @id @default(uuid())
+  userId           String
+  taskDefinitionId String
+  day              Int
+  status           TaskStatus // ASSIGNED, IN_PROGRESS, COMPLETED, FAILED
+  expiresAt        DateTime
+  earnedReward     Int?
 }
 
-class DailyTaskAssignment {
-    UUID id;
-    UUID userId;
-    UUID taskDefinitionId;
-    TaskStatus status;
-    LocalDateTime createdAt;
-    LocalDateTime completedAt;
-}
-
-class TaskEvent {
-    UUID id;
-    UUID assignmentId;
-    String eventType;   // e.g., COMPLETION, FAILURE, RUMOR
-    LocalDateTime createdAt;
+model Rumor {
+  id           String   @id @default(uuid())
+  day          Int
+  sourceUserId String
+  content      String
+  visibility   String   // PUBLIC, PRIVATE, ROLE_SPECIFIC
 }
 ```
 
-## Endpoints
-`POST v1/tasks/day/start` – Assign tasks for all players
-Request
-```json
-{ "day": 12 }
-```
-Response 200
-```json
-{ "day": 12, "assignedTasks": 120 }
-```
-Errors
-```json
-{ "error": { "code": "DAY_ALREADY_STARTED", "message": "Day already processed" } }
-```
-`GET v1/tasks/{userId}` – Retrieve tasks for a player
-Path Params:
-- `userId: string (uuid)`
-Response 200
-```json
-[
-  { "id": "uuid", "description": "Visit hospital", "status": "ASSIGNED" }
-]
-```
-Errors
-```json
-{ "error": { "code": "NOT_FOUND", "message": "User not found" } }
+## Testing
+
+### 1. API Testing with Postman (Recommended)
+1. Import `Task_Service_Complete.postman_collection.json` or `postman/task-service.postman_collection.json`
+2. Set `baseUrl` to `http://localhost:3001`
+3. Run the collection or individual requests
+4. Use the "Workflows" folder for complete task flow testing
+
+**Important:** The 400 errors like "DAY_ALREADY_STARTED" or "TASK_ALREADY_COMPLETED" are **correct behavior**, not bugs! They prevent duplicate operations.
+
+### 2. Interactive Testing with Swagger UI
+Open in browser: http://localhost:3001/docs
+- Try out all endpoints directly in the browser
+- See request/response examples
+- Test with different parameters
+
+### 3. Quick API Tests with cURL
+```bash
+# Health check
+curl http://localhost:3001/health
+
+# Start a new day
+curl -X POST http://localhost:3001/api/v1/tasks/day/start \
+  -H "Content-Type: application/json" \
+  -d '{"day": 1, "activeUsers": [{"userId": "user1", "role": "doctor"}]}'
+
+# Get user tasks
+curl http://localhost:3001/api/v1/tasks/user/user1
+
+# Get task definitions
+curl http://localhost:3001/api/v1/definitions
 ```
 
-`POST v1/tasks/{assignmentId}/complete` – Mark task as complete
+### 4. Unit Testing
+```bash
+# Run all tests
+npm test
 
-Headers: `Idempotency-Key: string` (recommended)
-Path Params:
-- `assignmentId: string (uuid)`
-Response 200
-```json
-{ "status": "COMPLETED", "reward": { "currency": 50 } }
-```
-Errors
-```json
-{ "error": { "code": "INVALID_STATE", "message": "Task already completed" } }
-```
-## Dependencies
-- Game Service: sends /day/start signal.
-- User Management Service: credits currency on completion.
-- Optional Shop/Roleplay: validates item/location/role requirements.
+# Run tests with coverage (91% statement coverage)
+npm run test:coverage
 
-## Data ownership:
-This service exclusively manages `task_definitions`, `daily_task_assignments`, and `task_events`. No other service writes to this DB.
+# Run specific test suite
+npm run test:unit
+```
+
+### 5. Test Scripts
+```bash
+# Quick test script - health checks and status
+./quick-test.sh
+
+# Comprehensive test script - full API testing
+./test-service.sh
+```
+
+### 6. Docker Testing
+```bash
+# Ensure service is running
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f task-service
+
+# Run tests in container
+docker exec task-service npm test
+```
+
+### 7. Reset for Fresh Testing
+```bash
+# Reset database with seed data
+docker exec task-service npm run db:reset
+
+# Or start with different day numbers (Day 2, 3, etc.) instead of Day 1
+```
+
+## Data Ownership
+
+This service owns:
+- `task_definitions` - Task templates
+- `daily_task_assignments` - User task assignments
+- `task_events` - Task lifecycle events
+- `rumors` - Generated rumors from task completions
+
+## Deployment Instructions
+
+### Cross-Platform Deployment (Windows/Mac/Linux)
+
+**Option A: Using Docker Compose (Recommended)**
+```bash
+# Clone repository
+git clone <repository>
+cd task-service
+
+# Start services
+docker-compose up -d
+
+# Verify it's working
+curl http://localhost:3001/health
+# Or open browser: http://localhost:3001/docs
+```
+
+**Option B: Using Published Docker Image**
+```bash
+# Pull latest image
+docker pull rayderr/mafia_liviu_task_service:latest
+
+# Run with docker-compose
+docker-compose up -d
+```
+
+### Windows-Specific Instructions
+```powershell
+# Using PowerShell or Command Prompt
+docker-compose up -d
+
+# Check health (PowerShell)
+Invoke-RestMethod http://localhost:3001/health
+```
+
+### macOS/Linux Instructions
+```bash
+# Standard Docker commands work
+docker-compose up -d
+curl http://localhost:3001/health
+```
+
+### Testing the Service
+1. Open Swagger UI: http://localhost:3001/docs
+2. Import Postman collection from `/postman` folder
+3. Run test workflows to demonstrate functionality
+
 
 # Voting Service
 
