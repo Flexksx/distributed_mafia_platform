@@ -1,0 +1,20 @@
+services:
+  rumors-service:
+    image: john490/rumors-service:latest
+    restart: unless-stopped
+    ports:
+      - "5150:5150"
+    networks:
+      - mafia-network
+
+  communication-service:
+    image: john490/communication-service:latest
+    restart: unless-stopped
+    ports:
+      - "5232:5232"
+    networks:
+      - mafia-network
+
+networks:
+  mafia-network:
+    driver: bridge
