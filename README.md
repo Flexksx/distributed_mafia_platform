@@ -490,28 +490,207 @@ interface Vote {
 }
 ```
 
-### Endpoints
+### REST API Endpoints
 
-#### `POST v1/lobbies` – Create new lobby
+All endpoints are prefixed with `/v1/lobby`
 
-Request body
+#### Lobby Management
+
+##### `GET /v1/lobby` – List lobbies
+
+Query parameters:
+
+* `status` (optional): Filter by lobby status (`OPEN`, `IN_GAME`, `CLOSED`)
+* `maxPlayers` (optional): Filter by maximum player count
+* `limit` (optional): Number of results to return
+* `offset` (optional): Number of results to skip
+
+Response: Array of lobby objects
+
+##### `GET /v1/lobby/:lobbyId` – Get lobby details
+
+Response: Lobby object with current status and player information
+
+##### `POST /v1/lobby` – Create new lobby
+
+Request body:
 
 ```json
-{ "name": "Lobby 1" }
+{
+  "name": "Shadow Manor",
+  "maxPlayers": 10
+}
 ```
 
-#### `POST v1/lobbies/{id}/join` – Add player to lobby
+Response: Created lobby object (201)
 
-Body:
+##### `DELETE /v1/lobby/:lobbyId` – Delete lobby
+
+Response: Success confirmation
+
+#### Game State Management
+
+##### `POST /v1/lobby/:lobbyId/start` – Start game
+
+Starts the game if lobby has minimum required players (3+)
+Response: Updated lobby object with game started
+
+##### `POST /v1/lobby/:lobbyId/end` – End game
+
+Ends the current active game
+Response: Updated lobby object with game ended
+
+##### `POST /v1/lobby/:lobbyId/cycle` – Switch time cycle
+
+Request body:
 
 ```json
-{ "userId": "uuid-of-user", "role": "VILLAGER", "career": "MERCHANT" }
+{
+  "cycle": "DAY"
+}
 ```
 
-Response: Player object.
-Errors: 409 (lobby full or already joined).
+Valid cycles: `DAY`, `NIGHT`
+Response: Updated lobby object with new cycle
 
-#### `GET v1/lobbies/{id}` – Retrieve lobby state
+#### Player Management
+
+##### `GET /v1/lobby/:lobbyId/players` – List lobby players
+
+Response: Array of active players in the lobby
+
+##### `POST /v1/lobby/:lobbyId/players` – Join lobby
+
+Request body:
+
+```json
+{
+  "userId": "user-123",
+  "role": "CIVILIAN",
+  "career": "Detective"
+}
+```
+
+Valid roles: `CIVILIAN`, `MAFIA`, `SHERIFF`, `DOCTOR`
+Response: Created player object (201)
+
+##### `DELETE /v1/lobby/:lobbyId/players/:userId` – Leave lobby
+
+Response: Success confirmation
+
+#### Player Game Actions
+
+##### `POST /v1/lobby/:lobbyId/players/:userId/kill` – Kill player
+
+Marks player as dead during active game
+Response: Updated player object
+
+##### `POST /v1/lobby/:lobbyId/players/:userId/heal` – Heal player
+
+Heals a killed player (doctor action)
+Response: Updated player object
+
+##### `POST /v1/lobby/:lobbyId/players/:userId/imprison` – Imprison player
+
+Temporarily imprisons player (sheriff action)
+Response: Success confirmation
+
+##### `POST /v1/lobby/:lobbyId/players/:userId/kick` – Kick player
+
+Removes player from lobby (moderator action)
+Response: Updated player object
+
+##### `POST /v1/lobby/:lobbyId/players/:userId/ban` – Ban player
+
+Permanently bans player from lobby
+Response: Updated player object
+
+#### Voting System
+
+##### `POST /v1/lobby/:lobbyId/vote` – Cast or update vote
+
+Request body:
+
+```json
+{
+  "voterId": "user-123",
+  "targetId": "user-456"
+}
+```
+
+Response: Vote details with success message
+
+* Creates new vote if player hasn't voted in current cycle
+* Updates existing vote if player changes their vote
+* Validates that both voter and target are active players
+* Ensures game is in active state
+
+#### Response Formats
+
+**Lobby Object:**
+
+```json
+{
+  "id": "clx1234567890",
+  "name": "Shadow Manor",
+  "status": "IN_GAME",
+  "currentTimeCycle": "DAY",
+  "cycleNumber": 3,
+  "maxPlayers": 10,
+  "gameStartTime": "2025-09-22T10:00:00Z",
+  "gameEndTime": null,
+  "createdAt": "2025-09-22T09:00:00Z",
+  "updatedAt": "2025-09-22T10:30:00Z"
+}
+```
+
+**Player Object:**
+
+```json
+{
+  "id": "clx0987654321",
+  "userId": "user-123",
+  "lobbyId": "clx1234567890",
+  "role": "CIVILIAN",
+  "career": "Detective",
+  "isAlive": true,
+  "isActive": true,
+  "joinedAt": "2025-09-22T09:15:00Z"
+}
+```
+
+**Vote Response:**
+
+```json
+{
+  "vote": {
+    "id": "clx5678901234",
+    "voterId": "user-123",
+    "targetId": "user-456",
+    "lobbyId": "clx1234567890",
+    "lobbyTimeCycleId": "clx3456789012",
+    "createdAt": "2025-09-22T10:45:00Z"
+  },
+  "isNewVote": true,
+  "message": "Vote cast successfully"
+}
+```
+
+#### Error Responses
+
+All endpoints return appropriate HTTP status codes:
+
+* `400 Bad Request`: Invalid input or game state
+* `404 Not Found`: Resource not found
+* `500 Internal Server Error`: Server error
+
+Error response format:
+
+```json
+{
+  "message": "Error description"
+}
+```
 
 ### Dependencies
 
