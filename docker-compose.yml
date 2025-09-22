@@ -1,5 +1,45 @@
 services:
   # =================================================================
+  # DATABASE SERVICES
+  # =================================================================
+
+  # PostgreSQL for User Management Service
+  user-management-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mafia_user
+      POSTGRES_PASSWORD: mafia_secure_password
+      POSTGRES_DB: mafia_users
+    volumes:
+      - user_management_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mafia_user -d mafia_users"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
+  # PostgreSQL for Game Service
+  game-service-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mafia_game_user
+      POSTGRES_PASSWORD: mafia_game_secure_password
+      POSTGRES_DB: mafia_game
+    volumes:
+      - game_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mafia_game_user -d mafia_game"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
+  # =================================================================
   # APPLICATION SERVICES
   # =================================================================
 
@@ -7,9 +47,19 @@ services:
   user-management-service:
     image: flexksx/mafia_user_management_service:latest
     restart: unless-stopped
+    depends_on:
+      user-management-db:
+        condition: service_healthy
     environment:
       PORT: 3000
       NODE_ENV: production
+      # Prisma database connection
+      DATABASE_URL: postgresql://mafia_user:mafia_secure_password@user-management-db:5432/mafia_users?schema=public
+      # Additional database config for compatibility
+      POSTGRES_USER: mafia_user
+      POSTGRES_PASSWORD: mafia_secure_password
+      POSTGRES_DB: mafia_users
+      POSTGRES_PORT: 5432
     ports:
       - "3000:3000"
     healthcheck:
@@ -21,7 +71,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
     networks:
       - mafia-network
 
@@ -30,11 +80,21 @@ services:
     image: flexksx/mafia-game-service:latest
     restart: unless-stopped
     depends_on:
-      - user-management-service
+      game-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
     environment:
       PORT: 3001
-      USER_SERVICE_URL: http://user-management-service:3000
       NODE_ENV: production
+      USER_SERVICE_URL: http://user-management-service:3000
+      # Prisma database connection
+      DATABASE_URL: postgresql://mafia_game_user:mafia_game_secure_password@game-service-db:5432/mafia_game?schema=public
+      # Additional database config for compatibility
+      POSTGRES_USER: mafia_game_user
+      POSTGRES_PASSWORD: mafia_game_secure_password
+      POSTGRES_DB: mafia_game
+      POSTGRES_PORT: 5432
     ports:
       - "3001:3001"
     healthcheck:
@@ -46,13 +106,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
     networks:
       - mafia-network
 
 # =================================================================
 # NETWORKS AND VOLUMES
 # =================================================================
+
+volumes:
+  user_management_data:
+    driver: local
+  game_service_data:
+    driver: local
 
 networks:
   mafia-network:
