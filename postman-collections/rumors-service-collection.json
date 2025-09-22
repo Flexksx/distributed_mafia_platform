@@ -1,0 +1,463 @@
+{
+	"info": {
+		"_postman_id": "rumors-service-tests",
+		"name": "Rumors Service API Tests",
+		"description": "Comprehensive test collection for Rumors Service - Currency-based information marketplace",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get Available Rumors",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response is array\", function () {",
+							"    pm.expect(pm.response.json()).to.be.an('array');",
+							"});",
+							"",
+							"pm.test(\"Response contains rumor information\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    if (responseJson.length > 0) {",
+							"        pm.expect(responseJson[0]).to.have.property('informationType');",
+							"        pm.expect(responseJson[0]).to.have.property('description');",
+							"        pm.expect(responseJson[0]).to.have.property('cost');",
+							"        pm.expect(responseJson[0]).to.have.property('accuracyRange');",
+							"    }",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-User-Role",
+						"value": "DETECTIVE",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/available",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"available"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Available Rumors - SHERIFF Role",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response is array\", function () {",
+							"    pm.expect(pm.response.json()).to.be.an('array');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-User-Role",
+						"value": "SHERIFF",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/available",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"available"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Available Rumors - No Role Header",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response uses default role\", function () {",
+							"    pm.expect(pm.response.json()).to.be.an('array');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/available",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"available"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Rumor Pricing",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response is object with pricing\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.be.an('object');",
+							"    pm.expect(Object.keys(responseJson).length).to.be.greaterThan(0);",
+							"});",
+							"",
+							"pm.test(\"Pricing values are numbers\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    Object.values(responseJson).forEach(price => {",
+							"        pm.expect(price).to.be.a('number');",
+							"        pm.expect(price).to.be.greaterThan(0);",
+							"    });",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/pricing",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"pricing"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Purchase Rumor - Valid Request",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response contains rumor data\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('id');",
+							"    pm.expect(responseJson).to.have.property('content');",
+							"    pm.expect(responseJson).to.have.property('accuracy');",
+							"    pm.expect(responseJson).to.have.property('cost');",
+							"    pm.expect(responseJson).to.have.property('purchasedAt');",
+							"});",
+							"",
+							"pm.test(\"Rumor properties are valid\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson.id).to.be.a('string').that.is.not.empty;",
+							"    pm.expect(responseJson.content).to.be.a('string').that.is.not.empty;",
+							"    pm.expect(responseJson.accuracy).to.be.a('number').within(0, 1);",
+							"    pm.expect(responseJson.cost).to.be.a('number').greaterThan(0);",
+							"});",
+							"",
+							"// Store rumor ID for history test",
+							"pm.globals.set('purchased_rumor_id', pm.response.json().id);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "X-User-Id",
+						"value": "test-user-1",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"targetPlayerId\": \"target-player-123\",\n  \"informationType\": \"TASK_SERVICE\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/purchase",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"purchase"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Purchase Rumor - Invalid Information Type",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test(\"Error message is present\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('error');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "X-User-Id",
+						"value": "test-user-1",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"targetPlayerId\": \"target-player-123\",\n  \"informationType\": \"INVALID_TYPE\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/purchase",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"purchase"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Purchase Rumor - Missing Body",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400 or 500\", function () {",
+							"    pm.expect([400, 500]).to.include(pm.response.code);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "X-User-Id",
+						"value": "test-user-1",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/purchase",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"purchase"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Rumor History - Valid User",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response is array\", function () {",
+							"    pm.expect(pm.response.json()).to.be.an('array');",
+							"});",
+							"",
+							"pm.test(\"History contains purchased rumor\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    if (responseJson.length > 0) {",
+							"        pm.expect(responseJson[0]).to.have.property('id');",
+							"        pm.expect(responseJson[0]).to.have.property('content');",
+							"        pm.expect(responseJson[0]).to.have.property('accuracy');",
+							"        pm.expect(responseJson[0]).to.have.property('cost');",
+							"        pm.expect(responseJson[0]).to.have.property('purchasedAt');",
+							"    }",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/history/test-user-1",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"history",
+						"test-user-1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Rumor History - User With No History",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response is empty array\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.be.an('array');",
+							"    pm.expect(responseJson).to.have.length(0);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/v1/rumor/history/new-user-no-history",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rumor",
+						"history",
+						"new-user-no-history"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5150",
+			"type": "string"
+		}
+	]
+}

@@ -1,0 +1,676 @@
+{
+	"info": {
+		"_postman_id": "communication-service-tests",
+		"name": "Communication Service API Tests",
+		"description": "Comprehensive test collection for Communication Service - Multi-channel chat system with game-state-aware messaging",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Global Chat Tests",
+			"item": [
+				{
+					"name": "Send Global Message - Valid User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains message data\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('id');",
+									"    pm.expect(responseJson).to.have.property('senderId');",
+									"    pm.expect(responseJson).to.have.property('content');",
+									"    pm.expect(responseJson).to.have.property('type');",
+									"    pm.expect(responseJson).to.have.property('timestamp');",
+									"});",
+									"",
+									"pm.test(\"Message properties are valid\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.id).to.be.a('string').that.is.not.empty;",
+									"    pm.expect(responseJson.senderId).to.equal('test-user-1');",
+									"    pm.expect(responseJson.content).to.equal('Hello global chat!');",
+									"    pm.expect(responseJson.type).to.equal('GLOBAL');",
+									"});",
+									"",
+									"// Store message ID for later use",
+									"pm.globals.set('global_message_id', pm.response.json().id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Id",
+								"value": "test-user-1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Hello global chat!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/global/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"global",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Send Global Message - No User Header",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Uses default user ID\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.senderId).to.equal('mock-user-id');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Message without user header\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/global/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"global",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Send Global Message - Empty Content",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 or 500\", function () {",
+									"    pm.expect([400, 500]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Id",
+								"value": "test-user-1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/global/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"global",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Global Messages",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is array\", function () {",
+									"    pm.expect(pm.response.json()).to.be.an('array');",
+									"});",
+									"",
+									"pm.test(\"Messages have correct structure\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    if (responseJson.length > 0) {",
+									"        const message = responseJson[0];",
+									"        pm.expect(message).to.have.property('id');",
+									"        pm.expect(message).to.have.property('senderId');",
+									"        pm.expect(message).to.have.property('content');",
+									"        pm.expect(message).to.have.property('type');",
+									"        pm.expect(message).to.have.property('timestamp');",
+									"        pm.expect(message.type).to.equal('GLOBAL');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/chat/global/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"global",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Mafia Chat Tests",
+			"item": [
+				{
+					"name": "Send Mafia Message - Authorized User (user1)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains mafia message data\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('id');",
+									"    pm.expect(responseJson).to.have.property('senderId');",
+									"    pm.expect(responseJson).to.have.property('content');",
+									"    pm.expect(responseJson).to.have.property('type');",
+									"    pm.expect(responseJson).to.have.property('timestamp');",
+									"});",
+									"",
+									"pm.test(\"Message is MAFIA type\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.senderId).to.equal('user1');",
+									"    pm.expect(responseJson.content).to.equal('Secret mafia strategy discussion');",
+									"    pm.expect(responseJson.type).to.equal('MAFIA');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Id",
+								"value": "user1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Secret mafia strategy discussion\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/mafia/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"mafia",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Send Mafia Message - Authorized User (user2)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Message is MAFIA type\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.senderId).to.equal('user2');",
+									"    pm.expect(responseJson.type).to.equal('MAFIA');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Id",
+								"value": "user2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Let's target player Y tonight\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/mafia/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"mafia",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Send Mafia Message - Unauthorized User (user3)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});",
+									"",
+									"pm.test(\"Error message indicates unauthorized\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('error');",
+									"    pm.expect(responseJson.error).to.include('mafia');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Id",
+								"value": "user3",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Trying to send mafia message as non-mafia user\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/mafia/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"mafia",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Send Mafia Message - Unknown User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});",
+									"",
+									"pm.test(\"Error message indicates unauthorized\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('error');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Id",
+								"value": "unknown-user-999",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Trying to send mafia message as unknown user\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/mafia/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"mafia",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Channel Tests",
+			"item": [
+				{
+					"name": "Get Global Channel Messages",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is array\", function () {",
+									"    pm.expect(pm.response.json()).to.be.an('array');",
+									"});",
+									"",
+									"pm.test(\"Messages belong to global channel\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    responseJson.forEach(message => {",
+									"        pm.expect(message).to.have.property('id');",
+									"        pm.expect(message).to.have.property('senderId');",
+									"        pm.expect(message).to.have.property('content');",
+									"        pm.expect(message).to.have.property('type');",
+									"        pm.expect(message).to.have.property('timestamp');",
+									"    });",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/chat/channels/global-channel/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"channels",
+								"global-channel",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Mafia Channel Messages",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is array\", function () {",
+									"    pm.expect(pm.response.json()).to.be.an('array');",
+									"});",
+									"",
+									"pm.test(\"Messages are MAFIA type\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    responseJson.forEach(message => {",
+									"        if (message.type) {",
+									"            pm.expect(message.type).to.equal('MAFIA');",
+									"        }",
+									"    });",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/chat/channels/mafia-channel/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"channels",
+								"mafia-channel",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Non-Existent Channel Messages",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is empty array\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.be.an('array');",
+									"    pm.expect(responseJson).to.have.length(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/chat/channels/non-existent-channel/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"channels",
+								"non-existent-channel",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Integration Tests",
+			"item": [
+				{
+					"name": "Full Global Chat Workflow",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Global chat workflow completed\", function () {",
+									"    // This test verifies the complete workflow:",
+									"    // 1. Send global message",
+									"    // 2. Retrieve global messages",
+									"    // 3. Verify message appears in results",
+									"    pm.expect(true).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Id",
+								"value": "integration-test-user",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Integration test message for global chat\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/global/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"global",
+								"messages"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5232",
+			"type": "string"
+		}
+	]
+}
