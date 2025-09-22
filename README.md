@@ -1,5 +1,21 @@
 # distributed_applications_labs
 
+The Mafia Game Platform is designed as a microservices-based distributed application where each service owns its own data and responsibilities while collaborating via REST/JSON APIs (with optional WebSocket or broker-based eventing for real-time flows). 
+
+At its core, the system provides a multiplayer social deduction game with persistent user accounts, lobbies, shops, role mechanics, rumors, chat, voting, and town exploration. Each service is deployed independently (containerized with Docker), uses its own PostgreSQL or MongoDB datastore, and is horizontally scalable. 
+
+* The **User Management Service** provides the single source of truth for player identity and in-game currency.
+* The **Game Service** orchestrates lobbies, player state, and day/night cycles.
+* The **Shop Service** handles item catalogs, purchases, and inventory.
+* The **Roleplay Service** governs role-specific actions and outcomes.
+* The **Rumors Service** creates a marketplace of information using flexible document storage.
+* The **Communication Service** enables real-time chat through REST/WebSockets and Redis pub/sub.
+* The **Task Service** assigns and tracks role-based tasks, rewarding players with currency.
+* The **Voting Service** manages evening exile votes with idempotency and tie-breaking logic.
+* The **Town Service** tracks player movements across locations.
+* Finally, the **Character Service** manages avatars and cosmetic customization.
+
+Together, these services compose a cohesive ecosystem where independent scaling, fault isolation, and clear domain boundaries make the platform robust, extensible, and ready for experimentation with distributed systems concepts such as event-driven architecture, CQRS, and eventual consistency.
 
 ## User Management Service
 
