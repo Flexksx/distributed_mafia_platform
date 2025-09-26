@@ -578,6 +578,69 @@ Error response format:
 
 **Core responsibility:** Enables players to prepare for day/night cycles by purchasing protective items and task-assistance objects using in-game currency.
 
+## Docker Hub Images
+
+The service is available as Docker images on Docker Hub:
+- Service Image: `cebanvasile1/shop-service:1.0.0`
+- Database Image: `cebanvasile1/shop-service-db:1.0.0`
+
+### Quickest Start (Using Pre-built Images)
+
+1. **Requirements:**
+   - Docker installed (version 20.10.0 or higher)
+   - 2GB RAM minimum
+   - 1GB free disk space
+   - Ports 8081 and 5432 available
+
+2. **Run with a single command:**
+   ```bash
+   docker run -d --name shop-db --network shop_network -p 5432:5432 cebanvasile1/shop-service-db:1.0.0 && \
+   docker run -d --name shop-service --network shop_network -p 8081:8081 -e SPRING_DATASOURCE_URL=jdbc:postgresql://shop-db:5432/shop_service_db -e SPRING_DATASOURCE_USERNAME=shop_user -e SPRING_DATASOURCE_PASSWORD=shop_password cebanvasile1/shop-service:1.0.0
+   ```
+
+   Or create a `docker-compose.yml`:
+   ```yaml
+   services:
+     postgres:
+       image: cebanvasile1/shop-service-db:1.0.0
+       ports:
+         - "5432:5432"
+       volumes:
+         - postgres_data:/var/lib/postgresql/data
+       networks:
+         - shop_network
+       healthcheck:
+         test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_service_db"]
+         interval: 10s
+         timeout: 5s
+         retries: 5
+
+     shop-service:
+       image: cebanvasile1/shop-service:1.0.0
+       environment:
+         SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/shop_service_db
+         SPRING_DATASOURCE_USERNAME: shop_user
+         SPRING_DATASOURCE_PASSWORD: shop_password
+       ports:
+         - "8081:8081"
+       networks:
+         - shop_network
+       depends_on:
+         postgres:
+           condition: service_healthy
+
+   networks:
+     shop_network:
+       driver: bridge
+
+   volumes:
+     postgres_data:
+   ```
+
+   Then run:
+   ```bash
+   docker-compose up -d
+   ```
 **Functionality**:
 - Item catalog management for protective and task-assistance items
 - Daily quantity balancing algorithm to ensure game economy stability
