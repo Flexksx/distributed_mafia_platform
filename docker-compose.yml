@@ -38,7 +38,7 @@ services:
       retries: 5
     networks:
       - mafia-network
-  
+
   # PostgreSQL for Task Service
   task-service-db:
     image: postgres:16-alpine
@@ -68,7 +68,8 @@ services:
     volumes:
       - voting_service_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voting_service_user -d voting_service_db"]
+      test:
+        ["CMD-SHELL", "pg_isready -U voting_service_user -d voting_service_db"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -89,9 +90,7 @@ services:
     environment:
       PORT: 3000
       NODE_ENV: production
-      # Prisma database connection
       DATABASE_URL: postgresql://mafia_user:mafia_secure_password@user-management-db:5432/mafia_users?schema=public
-      # Additional database config for compatibility
       POSTGRES_USER: mafia_user
       POSTGRES_PASSWORD: mafia_secure_password
       POSTGRES_DB: mafia_users
@@ -102,12 +101,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:3000/docs.json >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:3000/v1/users >/dev/null 2>&1 || exit 1",
         ]
-      interval: 30s
-      timeout: 10s
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 30s
     networks:
       - mafia-network
 
@@ -137,15 +136,15 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:3001/health >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:3001/v1/lobby >/dev/null 2>&1 || exit 1",
         ]
-      interval: 30s
-      timeout: 10s
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 30s
     networks:
       - mafia-network
-    
+
   # Task Service (Express.js + TypeScript + Prisma)
   task-service:
     image: rayderr/mafia_liviu_task_service:latest
@@ -218,7 +217,7 @@ services:
     # Run migrations as root, then switch to nodejs user for the app
     user: root
     command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
-    
+
 # =================================================================
 # NETWORKS AND VOLUMES
 # =================================================================

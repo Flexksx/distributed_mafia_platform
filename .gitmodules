@@ -32,3 +32,6 @@
 [submodule "services/town-service"]
 	path = services/town-service
 	url = https://github.com/LiviuTofan/town-service
+[submodule "mafia_api_gateway"]
+	path = mafia_api_gateway
+	url = git@github.com:Flexksx/mafia_api_gateway.git
