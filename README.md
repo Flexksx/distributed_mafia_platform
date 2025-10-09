@@ -574,7 +574,7 @@ Error response format:
 
 * (Optional later) Message broker for real-time announcements (e.g. Kafka, RabbitMQ, or WebSocket layer)
 
-## Shop Service
+# Shop Service
 
 **Core responsibility:** Enables players to prepare for day/night cycles by purchasing protective items and task-assistance objects using in-game currency.
 
@@ -584,13 +584,22 @@ The service is available as Docker images on Docker Hub:
 - Service Image: `cebanvasile1/shop-service:1.0.0`
 - Database Image: `cebanvasile1/shop-service-db:1.0.0`
 
+## Quick Start
+
+### Prerequisites
+
+- Java 17 or higher
+- Maven 3.6+ (or use the provided Maven wrapper)
+- Docker & Docker Compose
+- Git
+
 ### Quickest Start (Using Pre-built Images)
 
 1. **Requirements:**
-   - Docker installed (version 20.10.0 or higher)
-   - 2GB RAM minimum
-   - 1GB free disk space
-   - Ports 8081 and 5432 available
+    - Docker installed (version 20.10.0 or higher)
+    - 2GB RAM minimum
+    - 1GB free disk space
+    - Ports 8081 and 5432 available
 
 2. **Run with a single command:**
    ```bash
@@ -641,14 +650,139 @@ The service is available as Docker images on Docker Hub:
    ```bash
    docker-compose up -d
    ```
-**Functionality**:
+
+### Environment Setup (For Local Development)
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/ceban-vasile/Shop-Service.git
+   cd Shop-Service
+   ```
+
+2. **Create environment file:**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Configure your environment:**
+   Edit the `.env` file and set your secure values for:
+   ```properties
+   # Database configuration
+   POSTGRES_DB=shop_service_db
+   POSTGRES_USER=your_db_user
+   POSTGRES_PASSWORD=your_secure_password
+
+   # PgAdmin configuration
+   PGADMIN_DEFAULT_EMAIL=your_email@example.com
+   PGADMIN_DEFAULT_PASSWORD=your_secure_password
+
+   # Application configuration
+   SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/shop_service_db
+   SPRING_DATASOURCE_USERNAME=your_db_user
+   SPRING_DATASOURCE_PASSWORD=your_secure_password
+
+   # External Service URLs
+   USER_SERVICE_URL=http://localhost:3000
+   ROLEPLAY_SERVICE_URL=http://localhost:8082
+   TASK_SERVICE_URL=http://localhost:3001
+   GAME_SERVICE_URL=http://localhost:3000
+
+   # Docker configuration
+   DOCKER_USERNAME=your_docker_username
+   DOCKER_IMAGE=shop-service
+   DOCKER_TAG=1.0.0
+   ```
+
+### Running the Service
+
+#### Using Docker Compose (Recommended)
+
+1. **Start the services:**
+   ```bash
+   docker-compose up -d
+   ```
+   This will start:
+    - PostgreSQL database with persistent volume
+    - PgAdmin for database management
+    - Shop Service application
+
+2. **Check the services:**
+   ```bash
+   docker-compose ps
+   ```
+
+3. **View logs:**
+   ```bash
+   docker-compose logs -f shop-service
+   ```
+
+4. **Access the services:**
+    - Shop Service API: http://localhost:8081
+    - API Documentation: http://localhost:8081/swagger-ui.html
+    - PgAdmin: http://localhost:5050
+    - PostgreSQL: localhost:5432 (from other services)
+
+5. **Stop the services:**
+   ```bash
+   docker-compose down
+   ```
+   > Note: Your data will persist in Docker volumes between restarts.
+
+6. **To completely clean up:**
+   ```bash
+   docker-compose down -v
+   ```
+   > ⚠️ Warning: This will delete all data volumes!
+
+#### Using Run Scripts (Alternative)
+
+1. **Make the script executable (Linux/Mac):**
+   ```bash
+   chmod +x run.sh
+   ```
+
+2. **Run the service:**
+    - On Windows:
+      ```bash
+      ./run.bat
+      ```
+    - On Linux/Mac:
+      ```bash
+      ./run.sh
+      ```
+
+The script will:
+- Check if Docker is running
+- Build the project with Maven
+- Start PostgreSQL database
+- Wait for the database to be ready
+- Start the Spring Boot application
+
+---
+
+## Functionality
+
 - Item catalog management for protective and task-assistance items
 - Daily quantity balancing algorithm to ensure game economy stability
 - Purchase processing (coordinating with User Management Service for currency)
 - Inventory management for purchased items
 - Item effects management for protection against specific roles/actions
+- Integration with Character Service for asset purchases
+- Integration with Roleplay Service for item effect validation
+- Integration with Task Service for task-related item verification
 
-### Service Diagram
+---
+
+## Tech Stack
+
+* **Framework/language:** Java + Spring Boot (strong typing, enterprise-grade reliability)
+* **Database:** PostgreSQL (ACID transactions for critical purchase operations)
+* **Other:** Daily balancing algorithm, item effects engine
+* **Communication pattern:** Internal REST API for service-to-service communication
+
+---
+
+## Service Diagram
 
 ```mermaid
 flowchart LR
@@ -658,6 +792,8 @@ flowchart LR
         UMS[("User Management Service")]
         TS[("Task Service")]
         RS[("Roleplay Service")]
+        CS[("Character Service")]
+        GS[("Game Service")]
     end
 
     subgraph DataPersistence["Data Persistence"]
@@ -669,15 +805,23 @@ flowchart LR
     Client -- "HTTP/REST API Call" --> SS
     SS -- "JSON Response" --> Client
     SS -- "Reads/Writes item, inventory, transaction data" --> DB
-    SS -- "Verify/Deduct currency" --> UMS
-    UMS -- "Currency balance/update response" --> SS
-    SS -- "Validate item effects" --> RS
-    SS -- "Check task requirements" --> TS
+    SS -- "POST /v1/users/{id}/transactions (SUBTRACT)" --> UMS
+    UMS -- "GET /v1/users/{id}/balance" --> SS
+    SS -- "POST /api/v1/actions/verify-item" --> RS
+    RS -- "Item effectiveness response" --> SS
+    SS -- "GET /v1/tasks/verify-item" --> TS
+    TS -- "Task requirement validation" --> SS
+    SS -- "POST /v1/users/{userId}/inventory (asset purchases)" --> CS
+    CS -- "Asset added confirmation" --> SS
+    GS -- "GET /api/v1/items/stock-status (game state)" --> SS
+    SS -- "Active protection effects" --> GS
 ```
 
-### Domain Models and Interfaces
+---
 
-#### Item
+## Domain Models and Interfaces
+
+### Item
 ```typescript
 interface Item {
   id: string;
@@ -692,20 +836,22 @@ interface Item {
   imageUrl: string;
   usageInstructions?: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 enum ItemCategory {
   PROTECTION,        // Items that protect against attacks
   TASK_ASSISTANCE,   // Items that help with daily tasks
   UTILITY,           // General purpose items
-  SPECIAL            // Limited edition or event items
+  SPECIAL,           // Limited edition or event items
+  COSMETIC           // Character customization assets
 }
 
 interface ItemEffect {
   type: EffectType;
   value: number;      // Effect strength/duration
   duration: number;   // How many game cycles it lasts
-  targetRole?: string; // Role-specific protections
+  targetRole?: string; // Role-specific protections (aligns with Roleplay Service roles)
 }
 
 enum EffectType {
@@ -713,18 +859,18 @@ enum EffectType {
   DOUSE_ARSONIST,     // e.g., water
   CONCEAL_IDENTITY,   // e.g., mask
   REVEAL_ROLE,        // e.g., magnifying glass
-  BOOST_TASK,         // e.g., tools
+  BOOST_TASK,         // e.g., tools (integrates with Task Service)
   TRACKING,           // e.g., footprint detector
   BLOCK_ACTION        // e.g., handcuffs
 }
 ```
 
-#### Inventory
+### Inventory
 ```typescript
 interface InventoryItem {
   id: string;
   userId: string;
-  gameId: string;
+  gameId: string;      // References Game Service lobby
   itemId: string;
   name: string;
   quantity: number;
@@ -743,7 +889,7 @@ interface ActiveItemEffect {
 }
 ```
 
-#### Transaction
+### Transaction
 ```typescript
 interface Transaction {
   transactionId: string;
@@ -753,6 +899,7 @@ interface Transaction {
   totalCost: number;
   timestamp: Date;
   status: 'COMPLETED' | 'FAILED' | 'PENDING';
+  currencyTransactionId?: string; // Reference to User Service transaction
 }
 
 interface PurchasedItem {
@@ -764,19 +911,55 @@ interface PurchasedItem {
 }
 ```
 
-### APIs Exposed
+---
 
-#### 1. Get Available Items
+## APIs Exposed
 
-**Endpoint:** `GET /api/v1/items`
+### Endpoint Summary
 
-**Description:** Retrieves all available items for purchase in the shop, with quantities determined by the daily balancing algorithm.
+All endpoints are fully implemented with service integrations. The Shop Service provides **15 public endpoints** organized into 4 categories:
+
+#### Items Management (6 endpoints)
+1. `GET /api/v1/items/allAvailable` - Get available items with pagination
+2. `GET /api/v1/items/{id}` - Get item details
+3. `GET /api/v1/items/stock-status` - Get daily stock status
+4. `GET /api/v1/items/recommendations` - Get personalized item recommendations (🔗 Task Service)
+5. `GET /api/v1/items/{itemId}/effectiveness` - Get item effectiveness against roles
+6. `POST /api/v1/items` - Create new item (Admin)
+
+#### Inventory Management (7 endpoints)
+7. `GET /api/v1/inventory/{userId}` - View user inventory
+8. `POST /api/v1/inventory/{userId}/use` - Use item (🔗 Roleplay Service)
+9. `GET /api/v1/inventory/{userId}/active-effects` - Get active protection effects
+10. `POST /api/v1/inventory/transfer` - Transfer item to another player
+11. `DELETE /api/v1/inventory/{userId}/effects/{effectId}` - Cancel active effect
+12. `GET /api/v1/inventory/{userId}/unused` - Get unused items
+13. `PUT /api/v1/inventory/{id}` - Update inventory item
+
+#### Purchase Operations (3 endpoints)
+14. `POST /api/v1/purchases` - Process purchase (🔗 Character Service for cosmetics)
+15. `POST /api/v1/purchases/validate` - Validate purchase
+16. `GET /api/v1/purchases/history` - Get purchase history
+
+#### Game Events (1 endpoint)
+17. `POST /api/v1/events/game-cycle` - Receive game cycle events (webhook)
+
+🔗 = **Service Integration Active** - Endpoint communicates with external microservices
+
+---
+
+### 1. Get Available Items
+
+**Endpoint:** `GET /api/v1/items/allAvailable`
+
+**Description:** Retrieves all available items for purchase in the shop with dynamic quantity adjustment based on game context and daily balancing algorithm.
 
 **Query Parameters:**
-- `category` (optional): Filter by ItemCategory (PROTECTION, TASK_ASSISTANCE, etc.)
-- `page` (optional): Page number for pagination
-- `size` (optional): Number of items per page
-- `gameDay` (required): The current game day for proper inventory balancing
+- `category` (optional): Filter by ItemCategory (PROTECTION, TASK_ASSISTANCE, COSMETIC, etc.)
+- `page` (optional): Page number for pagination (default: 0)
+- `size` (optional): Number of items per page (default: 10)
+- `gameId` (optional): The game context (lobby ID from Game Service)
+- `gameDay` (optional): The current game day for proper inventory balancing
 
 **Response Format:**
 ```json
@@ -792,7 +975,8 @@ interface PurchasedItem {
         {
           "type": "WARD_VAMPIRE",
           "value": 100,
-          "duration": 1
+          "duration": 1,
+          "targetRole": "MAFIA"
         }
       ],
       "availableQuantity": 5,
@@ -807,17 +991,22 @@ interface PurchasedItem {
 
 **Status Codes:**
 - 200: Success
-- 400: Invalid parameters
+- 400: Invalid parameters (missing gameId or gameDay)
 - 500: Server error
 
-#### 2. Get Item Details
+---
+
+### 2. Get Item Details
 
 **Endpoint:** `GET /api/v1/items/{id}`
 
-**Description:** Retrieves detailed information about a specific item.
+**Description:** Retrieves detailed information about a specific item including effects, pricing, and availability.
 
 **Path Parameters:**
 - `id`: Unique identifier of the item
+
+**Query Parameters:**
+- `gameId` (optional): Game context for dynamic pricing
 
 **Response Format:**
 ```json
@@ -832,13 +1021,14 @@ interface PurchasedItem {
       "type": "WARD_VAMPIRE",
       "value": 100,
       "duration": 1,
-      "targetRole": "VAMPIRE"
+      "targetRole": "MAFIA"
     }
   ],
   "availableQuantity": 5,
   "imageUrl": "string",
   "usageInstructions": "Wear during the night phase for protection",
-  "createdAt": "string (ISO-8601 format)"
+  "createdAt": "2025-10-08T12:00:00Z",
+  "updatedAt": "2025-10-08T12:00:00Z"
 }
 ```
 
@@ -847,11 +1037,13 @@ interface PurchasedItem {
 - 404: Item not found
 - 500: Server error
 
-#### 3. Process Purchase
+---
+
+### 3. Process Purchase
 
 **Endpoint:** `POST /api/v1/purchases`
 
-**Description:** Processes a purchase transaction for one or more items. Coordinates with User Management Service to verify and deduct currency.
+**Description:** Processes a purchase transaction for one or more items. Verifies user balance, deducts currency, and adds items to inventory.
 
 **Request Format:**
 ```json
@@ -862,7 +1054,7 @@ interface PurchasedItem {
   "items": [
     {
       "itemId": "string",
-      "quantity": 0
+      "quantity": 1
     }
   ]
 }
@@ -872,10 +1064,11 @@ interface PurchasedItem {
 ```json
 {
   "transactionId": "string",
-  "status": "string",
-  "timestamp": "string (ISO-8601 format)",
-  "totalCost": 0,
-  "remainingBalance": 0,
+  "status": "COMPLETED",
+  "timestamp": "2025-10-08T12:00:00Z",
+  "totalCost": 50,
+  "remainingBalance": 450,
+  "currencyTransactionId": "string",
   "items": [
     {
       "itemId": "string",
@@ -891,36 +1084,55 @@ interface PurchasedItem {
 
 **Status Codes:**
 - 201: Purchase successful
-- 400: Insufficient funds or quantity not available
-- 404: Item not found
+- 400: Insufficient funds, quantity not available, or invalid request
+- 404: Item not found or user not found
 - 500: Server error
 
-#### 4. View User Inventory
+**Business Logic:**
+1. Verify user exists via User Management Service
+2. Check user balance via `GET /v1/users/{userId}/balance`
+3. Validate item availability and quantities
+4. For cosmetic items, verify compatibility with Character Service
+5. Create transaction record with status PENDING
+6. Deduct currency via `POST /v1/users/{userId}/transactions` (type: SUBTRACT)
+7. Update item quantities
+8. Add items to user inventory
+9. For cosmetic items, notify Character Service via `POST /v1/users/{userId}/inventory`
+10. Update transaction status to COMPLETED
+11. Return response with remaining balance
+
+---
+
+### 4. View User Inventory
 
 **Endpoint:** `GET /api/v1/inventory/{userId}`
 
-**Description:** Retrieves the inventory of items owned by a user.
+**Description:** Retrieves the inventory of items owned by a user for a specific game, including active effects and usage status.
 
 **Path Parameters:**
 - `userId`: Unique identifier of the user
 
 **Query Parameters:**
-- `gameId` (required): The game context for the inventory
+- `gameId` (optional): The game context for the inventory
+- `includeUsed` (optional): Include used items (default: false)
+- `category` (optional): Filter by item category
 
 **Response Format:**
 ```json
 {
   "userId": "string",
   "gameId": "string",
+  "totalItems": 5,
   "items": [
     {
       "id": "string",
       "itemId": "string",
       "name": "Garlic Necklace",
+      "category": "PROTECTION",
       "quantity": 1,
       "used": false,
-      "acquiredAt": "string (ISO-8601 format)",
-      "expiresAt": "string (ISO-8601 format)",
+      "acquiredAt": "2025-10-08T12:00:00Z",
+      "expiresAt": "2025-10-09T12:00:00Z",
       "effects": [
         {
           "type": "WARD_VAMPIRE",
@@ -936,14 +1148,16 @@ interface PurchasedItem {
 
 **Status Codes:**
 - 200: Success
-- 404: User not found or no inventory
+- 404: User not found or no inventory for game
 - 500: Server error
 
-#### 5. Use Item
+---
+
+### 5. Use Item
 
 **Endpoint:** `POST /api/v1/inventory/{userId}/use`
 
-**Description:** Uses an item from the user's inventory and applies its protective or task-assistance effects.
+**Description:** Uses an item from the user's inventory and applies its protective or task-assistance effects. Notifies Roleplay Service for protection effects.
 
 **Path Parameters:**
 - `userId`: Unique identifier of the user
@@ -971,21 +1185,34 @@ interface PurchasedItem {
       "duration": 1
     }
   ],
-  "remainingQuantity": 0
+  "remainingQuantity": 0,
+  "expiresAt": "2025-10-09T12:00:00Z"
 }
 ```
 
 **Status Codes:**
 - 200: Success
 - 404: Item not found in inventory
-- 400: Invalid use conditions
+- 400: Invalid use conditions (wrong cycle, already used, etc.)
 - 500: Server error
 
-#### 6. Get Daily Stock Status
+**Business Logic:**
+1. Verify item exists in user's inventory
+2. Validate game cycle matches item usage requirements
+3. Check if item is already used or expired
+4. For PROTECTION items, register effects with Roleplay Service via `POST /api/v1/actions/verify-item`
+5. For TASK_ASSISTANCE items, notify Task Service
+6. Mark item as used and activate effects
+7. Decrease quantity or mark as consumed
+8. Return success response with applied effects
+
+---
+
+### 6. Get Daily Stock Status
 
 **Endpoint:** `GET /api/v1/items/stock-status`
 
-**Description:** Provides information about the current stock levels and next restock time.
+**Description:** Provides information about the current stock levels and next restock time for a specific game.
 
 **Query Parameters:**
 - `gameId` (required): The game context
@@ -994,19 +1221,22 @@ interface PurchasedItem {
 **Response Format:**
 ```json
 {
+  "gameId": "string",
   "gameDay": 3,
-  "nextRestockTime": "string (ISO-8601 format)",
+  "nextRestockTime": "2025-10-09T00:00:00Z",
   "rareItemsAvailable": true,
   "categories": [
     {
       "name": "PROTECTION",
       "itemsAvailable": 4,
-      "totalItems": 6
+      "totalItems": 6,
+      "restockPercentage": 66.7
     },
     {
       "name": "TASK_ASSISTANCE",
       "itemsAvailable": 8,
-      "totalItems": 10
+      "totalItems": 10,
+      "restockPercentage": 80.0
     }
   ]
 }
@@ -1015,57 +1245,1449 @@ interface PurchasedItem {
 **Status Codes:**
 - 200: Success
 - 400: Invalid parameters
+- 404: Game not found
 - 500: Server error
 
-### Inter-Service Communication
+---
 
-#### Outgoing Requests:
+### 7. Get Active Protection Effects (Internal API)
 
-1. **To User Management Service**
-   - Check user currency balance before purchase
-   - Deduct currency after successful purchase
-   - API: `POST v1/users/{id}/currency` with transaction type "SUBTRACT"
+**Endpoint:** `GET /api/v1/inventory/{userId}/active-effects`
 
-2. **To Roleplay Service**
-   - Verify item effect compatibility with user's role
-   - Register active protection effects when items are used
-   - API: `POST /api/v1/actions/verify-item`
+**Description:** Returns currently active protection effects for a user. Called by Game Service and Roleplay Service during night phase.
 
-3. **To Task Service**
-   - Check if an item satisfies a task requirement
-   - API: `GET /v1/tasks/verify-item`
+**Path Parameters:**
+- `userId`: Unique identifier of the user
 
-#### Incoming Requests:
+**Query Parameters:**
+- `gameId` (required): The game context
+- `currentCycle` (required): Current game cycle (DAY/NIGHT)
 
-1. **From Game Service**
-   - Request for active protection effects during night phase
-   - Request for inventory information during day phase
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "activeEffects": [
+    {
+      "effectType": "WARD_VAMPIRE",
+      "value": 100,
+      "duration": 1,
+      "appliedAt": "2025-10-08T20:00:00Z",
+      "expiresAt": "2025-10-09T08:00:00Z",
+      "itemName": "Garlic Necklace"
+    }
+  ]
+}
+```
 
-2. **From Roleplay Service**
-   - Check active protections when processing role actions
+**Status Codes:**
+- 200: Success
+- 404: User not found
+- 500: Server error
 
-### Implementation Considerations
+---
 
-- **Daily Item Balancing Algorithm**: Implements a dynamic balancing system that:
-  - Adjusts available quantities based on player counts and game day
-  - Creates artificial scarcity for powerful items
-  - Ensures all player roles have access to appropriate protective items
-  - Randomizes some stock quantities to prevent predictable patterns
+### 8. Game Cycle Event (Webhook)
 
-- **Protection Effectiveness System**: 
-  - Different protection items have varying effectiveness against specific roles
-  - Some items provide partial protection (percentage-based)
-  - Stacking rules prevent overpowered combinations
+**Endpoint:** `POST /api/v1/events/game-cycle`
 
-- **Transaction Safety**:
-  - Implement optimistic locking for inventory operations
-  - Ensure atomic transactions when purchasing limited items
-  - Add idempotency keys for purchase operations
+**Description:** Receives game cycle change notifications from Game Service. Updates shop availability and triggers daily stock refresh.
 
-- **Performance Optimization**:
-  - Cache frequently accessed catalog items
-  - Batch update inventory records
-  - Use read replicas for inventory queries during high-traffic periods
+**Request Format:**
+```json
+{
+  "gameId": "string",
+  "gameDay": 3,
+  "cycle": "NIGHT",
+  "timestamp": "2025-10-08T20:00:00Z",
+  "eventType": "CYCLE_CHANGE"
+}
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "message": "Game cycle updated to NIGHT for day 3",
+  "stockRefreshed": true,
+  "affectedItems": 15
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 400: Invalid cycle data
+- 500: Server error
+
+**Business Logic:**
+1. Update current game cycle state
+2. If new day detected, trigger daily stock refresh
+3. Apply balancing algorithm to adjust quantities
+4. Expire old active effects
+5. Notify clients via WebSocket (future enhancement)
+
+---
+
+### 9. Validate Purchase
+
+**Endpoint:** `POST /api/v1/purchases/validate`
+
+**Description:** Validates a purchase without committing the transaction. Checks user balance, item availability, and calculates total cost.
+
+**Request Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "items": [
+    {
+      "itemId": "string",
+      "quantity": 2
+    }
+  ]
+}
+```
+
+**Response Format:**
+```json
+{
+  "valid": true,
+  "totalCost": 300,
+  "userBalance": 500,
+  "remainingBalance": 200,
+  "itemsAvailable": true,
+  "warnings": [],
+  "errors": []
+}
+```
+
+**Status Codes:**
+- 200: Validation complete (check `valid` field for result)
+- 400: Invalid request format
+- 500: Server error
+
+---
+
+### 10. Get Item Recommendations
+
+**Endpoint:** `GET /api/v1/items/recommendations`
+
+**Description:** Suggests items based on user's role, current threats in game, and budget.
+
+**Query Parameters:**
+- `userId` (required): User requesting recommendations
+- `gameId` (required): Current game context
+- `maxPrice` (optional): Budget limit
+
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "recommendations": [
+    {
+      "itemId": "string",
+      "name": "Garlic Necklace",
+      "price": 150,
+      "reason": "Protection against vampire attacks detected in game",
+      "priority": "HIGH",
+      "category": "PROTECTION"
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: User or game not found
+- 500: Server error
+
+---
+
+### 11. Get Item Effectiveness
+
+**Endpoint:** `GET /api/v1/items/{itemId}/effectiveness`
+
+**Description:** Shows how effective an item is against specific roles or threats.
+
+**Path Parameters:**
+- `itemId`: Item to check
+
+**Query Parameters:**
+- `targetRole` (optional): Specific role to check against
+- `gameId` (optional): Game context for dynamic effectiveness
+
+**Response Format:**
+```json
+{
+  "itemId": "string",
+  "name": "Garlic Necklace",
+  "effectiveness": [
+    {
+      "againstRole": "VAMPIRE",
+      "protectionLevel": 100,
+      "description": "Complete protection against vampire attacks"
+    },
+    {
+      "againstRole": "MAFIA",
+      "protectionLevel": 0,
+      "description": "No protection against mafia attacks"
+    }
+  ],
+  "usageInstructions": "Use during day phase to activate protection for the upcoming night"
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: Item not found
+- 500: Server error
+
+---
+
+### 12. Transfer Item
+
+**Endpoint:** `POST /api/v1/inventory/transfer`
+
+**Description:** Transfer items between players in the same game (gifting/trading).
+
+**Request Format:**
+```json
+{
+  "fromUserId": "string",
+  "toUserId": "string",
+  "gameId": "string",
+  "inventoryItemId": "string",
+  "quantity": 1,
+  "message": "Here's some protection for tonight!"
+}
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "transactionId": "string",
+  "message": "Item transferred successfully",
+  "senderNewQuantity": 0,
+  "recipientNewQuantity": 1
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 400: Invalid transfer (insufficient quantity, same user, etc.)
+- 404: User or item not found
+- 500: Server error
+
+---
+
+### 13. Get Purchase History
+
+**Endpoint:** `GET /api/v1/purchases/history`
+
+**Description:** Retrieves purchase history for a user in a specific game or across all games.
+
+**Query Parameters:**
+- `userId` (required): User to get history for
+- `gameId` (optional): Filter by specific game
+- `startDate` (optional): Filter from date
+- `endDate` (optional): Filter to date
+- `page` (optional): Page number (default: 0)
+- `size` (optional): Page size (default: 20)
+
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "totalPurchases": 15,
+  "totalSpent": 2250,
+  "purchases": [
+    {
+      "transactionId": "string",
+      "gameId": "string",
+      "purchaseDate": "2025-10-08T12:00:00Z",
+      "items": [
+        {
+          "itemId": "string",
+          "name": "Garlic Necklace",
+          "quantity": 1,
+          "pricePerUnit": 150,
+          "totalPrice": 150
+        }
+      ],
+      "totalCost": 150
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: User not found
+- 500: Server error
+
+---
+
+### 14. Cancel Active Effect
+
+**Endpoint:** `DELETE /api/v1/inventory/{userId}/effects/{effectId}`
+
+**Description:** Cancels an active item effect (useful if activated by mistake).
+
+**Path Parameters:**
+- `userId`: User who owns the effect
+- `effectId`: Active effect to cancel
+
+**Query Parameters:**
+- `gameId` (required): Game context
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "message": "Effect cancelled successfully",
+  "refundIssued": false,
+  "effectType": "WARD_VAMPIRE"
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 404: Effect not found or already expired
+- 400: Effect cannot be cancelled (already applied)
+- 500: Server error
+
+---
+
+## Inter-Service Communication
+
+### Outgoing Requests (Shop Service → Other Services)
+
+#### 1. To User Management Service
+
+**Purpose:** Currency validation and deduction
+
+**Endpoints Used:**
+- `GET /v1/users/{id}/balance` - Check user's current balance before purchase
+- `POST /v1/users/{id}/transactions` - Deduct currency after successful purchase
+
+**Request Example:**
+```json
+POST /v1/users/{userId}/transactions
+{
+  "amount": 150,
+  "type": "SUBTRACT",
+  "reason": "Shop purchase - transaction ID: txn_123"
+}
+```
+
+**Error Handling:**
+- If balance insufficient: Return 400 to client
+- If user not found: Return 404 to client
+- Transaction failures: Rollback shop transaction
+
+---
+
+#### 2. To Roleplay Service
+
+**Purpose:** Verify item effect compatibility and register active protections
+
+**Endpoints Used:**
+- `POST /api/v1/actions/verify-item` - Verify item effectiveness against roles
+
+**Request Example:**
+```json
+POST /api/v1/actions/verify-item
+{
+  "itemId": "item_garlic_001",
+  "effectType": "WARD_VAMPIRE",
+  "targetRoleId": "role_mafia_001",
+  "gamePhase": "NIGHT"
+}
+```
+
+**Response Example:**
+```json
+{
+  "effective": true,
+  "effectMultiplier": 1.0,
+  "message": "Item is effective against this role"
+}
+```
+
+**When to Call:**
+- During item usage (`POST /api/v1/inventory/{userId}/use`)
+- When Game Service queries active protections
+
+---
+
+#### 3. To Task Service
+
+**Purpose:** Validate if items satisfy task requirements
+
+**Endpoints Used:**
+- `GET /v1/tasks/verify-item` - Check if item helps complete a task
+
+**Request Example:**
+```json
+GET /v1/tasks/verify-item?userId=user123&itemId=item_tools_001&gameId=game_001
+```
+
+**Response Example:**
+```json
+{
+  "applicable": true,
+  "taskId": "task_456",
+  "taskName": "Repair the fence",
+  "bonusReward": 50
+}
+```
+
+**When to Call:**
+- During purchase to show task-related recommendations
+- During item usage to notify task completion
+
+---
+
+#### 4. To Character Service
+
+**Purpose:** Sync cosmetic asset purchases
+
+**Endpoints Used:**
+- `POST /v1/users/{userId}/inventory` - Add cosmetic asset to character inventory
+
+**Request Example:**
+```json
+POST /v1/users/{userId}/inventory
+{
+  "assetId": "asset_red_coat_001",
+  "source": "SHOP_PURCHASE"
+}
+```
+
+**When to Call:**
+- Only for items with category `COSMETIC`
+- After successful purchase transaction
+
+---
+
+### Implemented Service Integrations
+
+The Shop Service now includes REST client implementations for seamless integration with other microservices:
+
+#### 1. CharacterServiceClient
+
+**Location:** `src/main/java/com/mafia/shop_service/client/CharacterServiceClient.java`
+
+**Purpose:** Automatically syncs cosmetic item purchases to Character Service inventory
+
+**Integration Point:**
+- **Trigger:** Automatically called in `PurchaseServiceImpl.processPurchase()` when item category is `COSMETIC`
+- **Endpoint Called:** `POST /v1/users/{userId}/inventory` on Character Service
+- **Error Handling:** Graceful degradation - purchase succeeds even if Character Service is unavailable
+- **Configuration:** `external.character-service.url` (default: http://localhost:8080)
+
+**Example Flow:**
+```java
+// After successful cosmetic purchase
+if (item.getCategory() == ItemCategory.COSMETIC) {
+    characterServiceClient.addToInventory(
+        userId, 
+        item.getId(), 
+        "SHOP_PURCHASE"
+    );
+}
+```
+
+---
+
+#### 2. TaskServiceClient
+
+**Location:** `src/main/java/com/mafia/shop_service/client/TaskServiceClient.java`
+
+**Purpose:** Verifies if items help complete user tasks and provides personalized recommendations
+
+**Integration Point:**
+- **Trigger:** Called in `ItemService.getRecommendations()` for TASK_ASSISTANCE items
+- **Endpoint Called:** `GET /v1/tasks/verify-item?userId={userId}&itemId={itemId}&gameId={gameId}` on Task Service
+- **Benefits:** Shows task-specific benefits and bonus rewards in recommendations
+- **Error Handling:** Returns default recommendations if Task Service is unavailable
+- **Configuration:** `external.task-service.url` (default: http://localhost:3001)
+
+**Example Response Enhancement:**
+```json
+{
+  "itemId": "tool_hammer_001",
+  "name": "Hammer",
+  "price": 50,
+  "reason": "Helps complete task: Repair the fence",
+  "priority": "MEDIUM",
+  "category": "TASK_ASSISTANCE"
+}
+```
+
+---
+
+#### 3. RoleplayServiceClient
+
+**Location:** `src/main/java/com/mafia/shop_service/client/RoleplayServiceClient.java`
+
+**Purpose:** Registers active protections and verifies item effectiveness against roles
+
+**Integration Points:**
+
+**A. Protection Registration**
+- **Trigger:** Called in `InventoryService.useItem()` when player uses a protection item
+- **Endpoint Called:** `POST /api/v1/protections` on Roleplay Service
+- **Items Affected:** WARD_*, DOUSE_*, BLOCK_ACTION, CONCEAL_IDENTITY effects
+- **Error Handling:** Item is still marked as used even if registration fails
+- **Configuration:** `external.roleplay-service.url` (default: http://localhost:8082)
+
+**B. Effectiveness Verification**
+- **Trigger:** Can be called during item effectiveness checks
+- **Endpoint Called:** `POST /api/v1/actions/verify-item` on Roleplay Service
+- **Purpose:** Validates item effectiveness against specific roles
+
+**Example Protection Registration:**
+```java
+// When player uses Garlic Necklace
+roleplayServiceClient.registerProtection(
+    userId, 
+    gameId, 
+    inventoryItemId, 
+    "WARD_VAMPIRE"
+);
+```
+
+---
+
+#### Configuration Properties
+
+All external service integrations are configured via `application.properties`:
+
+```properties
+# External Service URLs
+external.user-service.url=${USER_SERVICE_URL:http://localhost:3000}
+external.game-service.url=${GAME_SERVICE_URL:http://localhost:3000}
+external.roleplay-service.url=${ROLEPLAY_SERVICE_URL:http://localhost:8082}
+external.task-service.url=${TASK_SERVICE_URL:http://localhost:3001}
+external.character-service.url=${CHARACTER_SERVICE_URL:http://localhost:8080}
+
+# Resilience Configuration
+resilience4j.circuitbreaker.enabled=true
+resilience4j.retry.max-attempts=3
+```
+
+**Environment Variable Support:**
+- Set `CHARACTER_SERVICE_URL`, `TASK_SERVICE_URL`, `ROLEPLAY_SERVICE_URL` etc. in your deployment environment
+- Defaults to localhost URLs for local development
+- Docker deployments should use service names (e.g., `http://character-service:8080`)
+
+---
+
+#### RestTemplate Configuration
+
+**Location:** `src/main/java/com/mafia/shop_service/config/RestClientConfig.java`
+
+**Features:**
+- Connection timeout: 5 seconds
+- Read timeout: 10 seconds
+- Shared bean for all service clients
+- Simple and reliable HTTP client factory
+
+---
+
+#### Integration Benefits
+
+✅ **Automatic Cosmetic Sync:** Cosmetic purchases instantly appear in Character Service  
+✅ **Smart Recommendations:** Item suggestions consider active tasks and potential bonuses  
+✅ **Protection Coordination:** Protection effects are tracked across services  
+✅ **Graceful Degradation:** Core shop functionality works even if optional services are down  
+✅ **Configurable URLs:** Easy deployment across different environments  
+✅ **Error Resilience:** Comprehensive error handling prevents cascading failures  
+
+---
+
+### Incoming Requests (Other Services → Shop Service)
+
+#### 1. From Game Service
+
+**Purpose:** Query active protections during game cycles
+
+**Endpoints Called:**
+- `GET /api/v1/inventory/{userId}/active-effects` - Get active item protections
+- `GET /api/v1/items/stock-status` - Check shop availability for announcements
+
+**Usage Scenarios:**
+- Night phase begins: Check all players' active protections
+- Day cycle: Display shop availability in game UI
+- Game events: Verify if items blocked certain actions
+
+---
+
+#### 2. From Roleplay Service
+
+**Purpose:** Check active protections when processing role actions
+
+**Endpoints Called:**
+- `GET /api/v1/inventory/{userId}/active-effects` - Verify protection status
+
+**Usage Scenarios:**
+- Mafia attempts kill: Check if target has protection items
+- Detective investigates: Check if target has concealment items
+- Doctor heals: Check if target already has protective items
+
+---
+
+#### 3. From Character Service
+
+**Purpose:** Query cosmetic item catalog for character customization
+
+**Endpoints Called:**
+- `GET /api/v1/items?category=COSMETIC` - Get available cosmetic items
+
+**Usage Scenarios:**
+- Character creation/customization screen
+- Preview available cosmetic purchases
+
+---
+
+## Implementation Considerations
+
+### 1. Daily Item Balancing Algorithm
+
+**Purpose:** Dynamic stock management based on game state
+
+**Algorithm Logic:**
+```typescript
+interface BalancingFactors {
+  gameDay: number;
+  totalPlayers: number;
+  activePlayers: number;
+  playerDeaths: number;
+  averagePlayerBalance: number;
+}
+
+function calculateAvailableQuantity(
+  item: Item,
+  factors: BalancingFactors
+): number {
+  let quantity = item.maxDailyQuantity;
+  
+  // Adjust for game progression
+  if (factors.gameDay > 5) {
+    quantity *= 0.8; // Reduce availability in late game
+  }
+  
+  // Adjust for player count
+  const playerRatio = factors.activePlayers / factors.totalPlayers;
+  quantity *= playerRatio;
+  
+  // Adjust for rarity
+  if (item.category === 'SPECIAL') {
+    quantity = Math.max(1, Math.floor(quantity * 0.3));
+  }
+  
+  // Ensure minimum availability
+  return Math.max(1, Math.floor(quantity));
+}
+```
+
+**Features:**
+- Adjusts available quantities based on player counts and game day
+- Creates artificial scarcity for powerful items
+- Ensures all player roles have access to appropriate protective items
+- Randomizes some stock quantities to prevent predictable patterns
+- Daily restocking at midnight (game time)
+
+---
+
+### 2. Protection Effectiveness System
+
+**Integration with Roleplay Service:**
+- Different protection items have varying effectiveness against specific roles
+- Some items provide partial protection (percentage-based)
+- Stacking rules prevent overpowered combinations
+
+**Example:**
+```typescript
+// Garlic Necklace: 100% protection against Mafia
+// Silver Bullet: 100% protection against Werewolf
+// Holy Water: 50% protection against any evil role
+```
+
+---
+
+### 3. Transaction Safety
+
+**ACID Compliance:**
+- Implement optimistic locking for inventory operations
+- Ensure atomic transactions when purchasing limited items
+- Add idempotency keys for purchase operations
+- Rollback mechanisms for failed currency deductions
+
+**Transaction Flow:**
+```
+1. BEGIN TRANSACTION
+2. Lock item stock record
+3. Verify user balance (external call)
+4. Create pending transaction record
+5. Deduct currency (external call)
+6. Update item quantities
+7. Add to user inventory
+8. Update transaction status to COMPLETED
+9. COMMIT TRANSACTION
+10. Send notifications (async)
+```
+
+**Rollback Scenarios:**
+- Currency deduction fails → Rollback inventory changes
+- Service timeout → Mark transaction as PENDING for manual review
+- Concurrent purchase of last item → First transaction wins
+
+---
+
+### 4. Performance Optimization
+
+**Caching Strategy:**
+- Cache item catalog (TTL: 1 hour)
+- Cache user inventory (TTL: 5 minutes, invalidate on purchase)
+- Cache active effects (TTL: 30 seconds during night phase)
+
+**Database Optimization:**
+- Index on `userId` + `gameId` for inventory queries
+- Index on `itemId` + `category` for catalog queries
+- Batch update inventory records for multiple purchases
+- Use read replicas for inventory queries during high-traffic periods
+
+**Async Processing:**
+- Purchase notifications to Character Service (async)
+- Task completion notifications (async)
+- Stock level logging and analytics (async)
+
+---
+
+## Data Ownership
+
+This service owns:
+- `items` - Item catalog and definitions
+- `inventory_items` - User inventory per game
+- `transactions` - Purchase transaction records
+- `item_effects` - Item effect definitions
+- `daily_stock_records` - Historical stock levels
+
+---
+
+## Testing
+
+### API Testing with Postman
+
+1. Import `shop-service.postman_collection.json`
+2. Set environment variables:
+    - `baseUrl`: `http://localhost:8081`
+    - `userId`: Test user ID
+    - `gameId`: Test game/lobby ID
+3. Run workflows:
+    - Complete purchase flow
+    - Inventory management
+    - Item usage scenarios
+
+### Integration Testing
+
+**Prerequisites:**
+- User Management Service running (port 3000)
+- Game Service running (port 3000)
+- Roleplay Service running (port 8082)
+
+**Test Scenarios:**
+1. Purchase with sufficient balance
+2. Purchase with insufficient balance
+3. Purchase unavailable item
+4. Use protection item during night phase
+5. Use task assistance item
+6. Query active effects during game
+
+### Unit Testing
+
+```bash
+# Run all tests
+mvn test
+
+# Run with coverage
+mvn test jacoco:report
+
+# Integration tests only
+mvn verify -P integration-tests
+```
+
+---
+
+## Deployment
+
+### Docker Deployment
+
+```bash
+# Pull from Docker Hub
+docker pull cebanvasile1/shop-service:1.0.0
+
+# Run with environment variables
+docker run -d \
+  --name shop-service \
+  -p 8081:8081 \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/shop_db \
+  -e USER_SERVICE_URL=http://user-service:3000 \
+  -e ROLEPLAY_SERVICE_URL=http://roleplay-service:8082 \
+  -e TASK_SERVICE_URL=http://task-service:3001 \
+  cebanvasile1/shop-service:1.0.0
+```
+
+### Service Dependencies
+
+**Required Services:**
+- User Management Service (for currency operations)
+- PostgreSQL Database
+
+**Optional Services (graceful degradation):**
+- Roleplay Service (item effectiveness validation)
+- Task Service (task-related item bonuses)
+- Character Service (cosmetic asset sync)
+- Game Service (game state queries)
+
+---
+
+## Monitoring & Health Checks
+
+**Health Endpoints:**
+- `GET /actuator/health` - Service health
+- `GET /actuator/health/db` - Database connectivity
+- `GET /actuator/health/external` - External service connectivity
+
+**Metrics:**
+- Total purchases per day
+- Average transaction value
+- Most popular items
+- Stock depletion rates
+- Failed transaction reasons
+
+---
+
+## Error Handling
+
+**Error Response Format:**
+```json
+{
+  "timestamp": "2025-10-08T12:00:00Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Insufficient funds",
+  "path": "/api/v1/purchases",
+  "details": {
+    "required": 150,
+    "available": 100,
+    "userId": "user123"
+  }
+}
+```
+
+**Common Error Codes:**
+- `INSUFFICIENT_FUNDS` - User doesn't have enough currency
+- `ITEM_OUT_OF_STOCK` - Item quantity not available
+- `ITEM_NOT_FOUND` - Invalid item ID
+- `USER_NOT_FOUND` - Invalid user ID
+- `GAME_NOT_ACTIVE` - Game is not in active state
+- `INVALID_GAME_CYCLE` - Item cannot be used in current cycle
+- `ALREADY_USED` - Item already consumed
+- `EXTERNAL_SERVICE_ERROR` - Dependency service unavailable
+
+---
+
+## API Documentation
+
+Interactive API documentation is available at `/swagger-ui.html` when the service is running. The OpenAPI specification can be accessed at `/v3/api-docs`.
+
+---
+
+## Security Considerations
+
+- Validate all user inputs
+- Sanitize item descriptions to prevent XSS
+- Rate limit purchase endpoints (max 10 purchases per minute per user)
+- Log all transactions for audit trail
+- Encrypt sensitive transaction data
+- Implement CSRF protection for state-changing operations
+
+---
+
+## Future Enhancements
+
+1. **Auction System**: Players can bid on rare items
+2. **Item Trading**: Player-to-player item exchange
+3. **Crafting System**: Combine items to create new ones
+4. **Seasonal Items**: Limited-time event items
+5. **Bulk Purchase Discounts**: Volume-based pricing
+6. **Wishlist Feature**: Notify users when items restock
+7. **Gift System**: Send items to other players
+8. **Item Rental**: Temporary item usage for lower cost
+9. **Dynamic Pricing**: Adjust prices based on supply/demand
+10. **Loyalty Rewards**: Discounts for frequent shoppers
+
+---
+
+## Configuration
+
+### Application Properties
+
+```properties
+# Server Configuration
+server.port=8081
+server.servlet.context-path=/
+
+# Database Configuration
+spring.datasource.url=${SPRING_DATASOURCE_URL}
+spring.datasource.username=${SPRING_DATASOURCE_USERNAME}
+spring.datasource.password=${SPRING_DATASOURCE_PASSWORD}
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.format_sql=true
+
+# External Service URLs
+services.user-management.url=${USER_SERVICE_URL:http://localhost:3000}
+services.roleplay.url=${ROLEPLAY_SERVICE_URL:http://localhost:8082}
+services.task.url=${TASK_SERVICE_URL:http://localhost:3001}
+services.character.url=${CHARACTER_SERVICE_URL:http://localhost:8083}
+services.game.url=${GAME_SERVICE_URL:http://localhost:3000}
+
+# Shop Configuration
+shop.daily-restock-time=00:00:00
+shop.max-purchase-quantity=10
+shop.transaction-timeout-seconds=30
+shop.enable-dynamic-pricing=true
+shop.cache-ttl-minutes=60
+
+# Circuit Breaker Configuration (Resilience4j)
+resilience4j.circuitbreaker.instances.user-service.failure-rate-threshold=50
+resilience4j.circuitbreaker.instances.user-service.wait-duration-in-open-state=30s
+resilience4j.circuitbreaker.instances.user-service.sliding-window-size=10
+
+# Rate Limiting
+spring.cloud.gateway.routes[0].filters[0]=RequestRateLimiter=10,1m
+
+# Logging
+logging.level.root=INFO
+logging.level.com.mafia.shop=DEBUG
+logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %msg%n
+```
+
+---
+
+## Service Communication Examples
+
+### Example 1: Complete Purchase Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ShopService
+    participant UserService
+    participant CharacterService
+    participant RoleplayService
+
+    Client->>ShopService: POST /api/v1/purchases
+    ShopService->>ShopService: Validate request
+    ShopService->>UserService: GET /v1/users/{userId}/balance
+    UserService-->>ShopService: Balance: 500
+    ShopService->>ShopService: Check item availability
+    ShopService->>ShopService: Calculate total cost: 150
+    ShopService->>UserService: POST /v1/users/{userId}/transactions (SUBTRACT 150)
+    UserService-->>ShopService: Transaction successful, new balance: 350
+    ShopService->>ShopService: Update item quantities
+    ShopService->>ShopService: Add items to inventory
+    
+    alt Item is COSMETIC
+        ShopService->>CharacterService: POST /v1/users/{userId}/inventory
+        CharacterService-->>ShopService: Asset added
+    end
+    
+    ShopService->>ShopService: Mark transaction COMPLETED
+    ShopService-->>Client: Purchase successful (201)
+```
+
+### Example 2: Using Protection Item During Night Phase
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant ShopService
+    participant RoleplayService
+    participant GameService
+
+    Client->>ShopService: POST /api/v1/inventory/{userId}/use
+    ShopService->>ShopService: Verify item in inventory
+    ShopService->>ShopService: Check game cycle = NIGHT
+    ShopService->>RoleplayService: POST /api/v1/actions/verify-item
+    RoleplayService-->>ShopService: Item effective (100%)
+    ShopService->>ShopService: Activate protection effects
+    ShopService->>ShopService: Mark item as used
+    ShopService-->>Client: Protection activated (200)
+    
+    Note over GameService: Later during night phase
+    GameService->>ShopService: GET /api/v1/inventory/{userId}/active-effects
+    ShopService-->>GameService: Active: WARD_VAMPIRE (expires in 1 cycle)
+```
+
+### Example 3: Daily Stock Restock
+
+```mermaid
+sequenceDiagram
+    participant Scheduler
+    participant ShopService
+    participant GameService
+    participant Database
+
+    Scheduler->>ShopService: Trigger daily restock (00:00:00)
+    ShopService->>GameService: GET /v1/lobby?status=IN_GAME
+    GameService-->>ShopService: Active games list
+    
+    loop For each active game
+        ShopService->>ShopService: Calculate balancing factors
+        ShopService->>ShopService: Run balancing algorithm
+        ShopService->>Database: Update item quantities
+        ShopService->>Database: Log stock record
+    end
+    
+    ShopService->>ShopService: Clear item catalog cache
+    ShopService-->>Scheduler: Restock completed
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. Purchase Fails with "Insufficient Funds"
+
+**Symptoms:**
+```json
+{
+  "status": 400,
+  "error": "INSUFFICIENT_FUNDS",
+  "message": "User has insufficient balance"
+}
+```
+
+**Solutions:**
+- Verify user balance: `GET /v1/users/{userId}/balance` on User Service
+- Check if currency was recently spent in another transaction
+- Ensure currency synchronization between services
+
+---
+
+#### 2. Items Not Restocking
+
+**Symptoms:**
+- All items show `availableQuantity: 0`
+- Stock status doesn't update at midnight
+
+**Solutions:**
+- Check scheduler logs for restock job execution
+- Verify game state is active: `GET /v1/lobby/{gameId}` on Game Service
+- Check database for `daily_stock_records` table entries
+- Manually trigger restock: `POST /api/v1/admin/restock` (admin endpoint)
+
+---
+
+#### 3. Item Usage Fails During Night Phase
+
+**Symptoms:**
+```json
+{
+  "status": 400,
+  "error": "INVALID_GAME_CYCLE",
+  "message": "Item cannot be used during current cycle"
+}
+```
+
+**Solutions:**
+- Verify current game cycle from Game Service
+- Check item's `usablePhase` requirements
+- Ensure game is in active state
+- Check if item is already consumed
+
+---
+
+#### 4. External Service Timeouts
+
+**Symptoms:**
+- Purchases fail with timeout errors
+- Circuit breaker opens frequently
+
+**Solutions:**
+- Check User Service health: `GET /health` on port 3000
+- Verify network connectivity between services
+- Increase timeout configuration in `application.properties`
+- Check circuit breaker metrics in `/actuator/metrics`
+
+---
+
+#### 5. Inventory Synchronization Issues
+
+**Symptoms:**
+- Items purchased but not appearing in inventory
+- Character Service doesn't receive cosmetic items
+
+**Solutions:**
+- Check transaction status in database: `SELECT * FROM transactions WHERE status = 'PENDING'`
+- Verify Character Service connectivity
+- Replay failed notifications: `POST /api/v1/admin/retry-notifications`
+- Check async processing logs
+
+---
+
+## Database Schema
+
+### Tables
+
+```sql
+-- Items catalog
+CREATE TABLE items (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    price INTEGER NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    available_quantity INTEGER NOT NULL DEFAULT 0,
+    max_daily_quantity INTEGER NOT NULL,
+    replenish_rate INTEGER NOT NULL DEFAULT 1,
+    image_url VARCHAR(500),
+    usage_instructions TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Item effects
+CREATE TABLE item_effects (
+    id VARCHAR(36) PRIMARY KEY,
+    item_id VARCHAR(36) NOT NULL,
+    effect_type VARCHAR(50) NOT NULL,
+    value INTEGER NOT NULL,
+    duration INTEGER NOT NULL,
+    target_role VARCHAR(50),
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+);
+
+-- User inventory
+CREATE TABLE inventory_items (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    game_id VARCHAR(36) NOT NULL,
+    item_id VARCHAR(36) NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    used BOOLEAN DEFAULT FALSE,
+    acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES items(id),
+    INDEX idx_user_game (user_id, game_id),
+    INDEX idx_item (item_id)
+);
+
+-- Active effects
+CREATE TABLE active_effects (
+    id VARCHAR(36) PRIMARY KEY,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    effect_type VARCHAR(50) NOT NULL,
+    value INTEGER NOT NULL,
+    duration INTEGER NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
+);
+
+-- Purchase transactions
+CREATE TABLE transactions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    game_id VARCHAR(36) NOT NULL,
+    total_cost INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    currency_transaction_id VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_game (user_id, game_id),
+    INDEX idx_status (status)
+);
+
+-- Transaction items
+CREATE TABLE transaction_items (
+    id VARCHAR(36) PRIMARY KEY,
+    transaction_id VARCHAR(36) NOT NULL,
+    item_id VARCHAR(36) NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price INTEGER NOT NULL,
+    total_price INTEGER NOT NULL,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES items(id)
+);
+
+-- Daily stock records
+CREATE TABLE daily_stock_records (
+    id VARCHAR(36) PRIMARY KEY,
+    game_id VARCHAR(36) NOT NULL,
+    game_day INTEGER NOT NULL,
+    item_id VARCHAR(36) NOT NULL,
+    available_quantity INTEGER NOT NULL,
+    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES items(id),
+    UNIQUE KEY unique_game_day_item (game_id, game_day, item_id)
+);
+```
+
+### Seed Data
+
+```sql
+-- Protection items
+INSERT INTO items (id, name, description, price, category, available_quantity, max_daily_quantity, replenish_rate, image_url) VALUES
+('item_garlic_001', 'Garlic Necklace', 'Wards off vampires for one night', 50, 'PROTECTION', 10, 10, 5, '/images/garlic.png'),
+('item_water_001', 'Holy Water', 'Provides 50% protection against evil roles', 75, 'PROTECTION', 8, 8, 4, '/images/holy-water.png'),
+('item_mask_001', 'Identity Mask', 'Conceals your identity during investigations', 100, 'PROTECTION', 5, 5, 3, '/images/mask.png');
+
+-- Task assistance items
+INSERT INTO items (id, name, description, price, category, available_quantity, max_daily_quantity, replenish_rate, image_url) VALUES
+('item_tools_001', 'Repair Tools', 'Helps complete repair tasks faster', 30, 'TASK_ASSISTANCE', 15, 15, 10, '/images/tools.png'),
+('item_magnify_001', 'Magnifying Glass', 'Reveals clues for investigation tasks', 60, 'TASK_ASSISTANCE', 10, 10, 5, '/images/magnifying-glass.png');
+
+-- Item effects
+INSERT INTO item_effects (id, item_id, effect_type, value, duration, target_role) VALUES
+('effect_garlic_001', 'item_garlic_001', 'WARD_VAMPIRE', 100, 1, 'MAFIA'),
+('effect_water_001', 'item_water_001', 'BLOCK_ACTION', 50, 1, NULL),
+('effect_mask_001', 'item_mask_001', 'CONCEAL_IDENTITY', 100, 2, 'DETECTIVE'),
+('effect_tools_001', 'item_tools_001', 'BOOST_TASK', 30, 1, NULL),
+('effect_magnify_001', 'item_magnify_001', 'REVEAL_ROLE', 50, 1, NULL);
+```
+
+---
+
+## API Request/Response Examples
+
+### Purchase Multiple Items
+
+**Request:**
+```bash
+curl -X POST http://localhost:8081/api/v1/purchases \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {JWT_TOKEN}" \
+  -d '{
+    "userId": "user_123",
+    "gameId": "game_abc_001",
+    "gameDay": 3,
+    "items": [
+      {
+        "itemId": "item_garlic_001",
+        "quantity": 2
+      },
+      {
+        "itemId": "item_tools_001",
+        "quantity": 1
+      }
+    ]
+  }'
+```
+
+**Response:**
+```json
+{
+  "transactionId": "txn_789xyz",
+  "status": "COMPLETED",
+  "timestamp": "2025-10-08T14:30:00Z",
+  "totalCost": 130,
+  "remainingBalance": 370,
+  "currencyTransactionId": "curr_txn_456",
+  "items": [
+    {
+      "itemId": "item_garlic_001",
+      "name": "Garlic Necklace",
+      "quantity": 2,
+      "unitPrice": 50,
+      "totalPrice": 100
+    },
+    {
+      "itemId": "item_tools_001",
+      "name": "Repair Tools",
+      "quantity": 1,
+      "unitPrice": 30,
+      "totalPrice": 30
+    }
+  ],
+  "message": "Purchase successful. Items added to your inventory."
+}
+```
+
+---
+
+### Get Inventory with Filters
+
+**Request:**
+```bash
+curl -X GET "http://localhost:8081/api/v1/inventory/user_123?gameId=game_abc_001&category=PROTECTION&includeUsed=false" \
+  -H "Authorization: Bearer {JWT_TOKEN}"
+```
+
+**Response:**
+```json
+{
+  "userId": "user_123",
+  "gameId": "game_abc_001",
+  "totalItems": 2,
+  "items": [
+    {
+      "id": "inv_item_001",
+      "itemId": "item_garlic_001",
+      "name": "Garlic Necklace",
+      "category": "PROTECTION",
+      "quantity": 2,
+      "used": false,
+      "acquiredAt": "2025-10-08T14:30:00Z",
+      "expiresAt": null,
+      "effects": [
+        {
+          "type": "WARD_VAMPIRE",
+          "value": 100,
+          "duration": 1,
+          "active": false,
+          "targetRole": "MAFIA"
+        }
+      ]
+    },
+    {
+      "id": "inv_item_002",
+      "itemId": "item_mask_001",
+      "name": "Identity Mask",
+      "category": "PROTECTION",
+      "quantity": 1,
+      "used": false,
+      "acquiredAt": "2025-10-07T10:15:00Z",
+      "expiresAt": "2025-10-10T08:00:00Z",
+      "effects": [
+        {
+          "type": "CONCEAL_IDENTITY",
+          "value": 100,
+          "duration": 2,
+          "active": false,
+          "targetRole": "DETECTIVE"
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### Use Item with Target
+
+**Request:**
+```bash
+curl -X POST http://localhost:8081/api/v1/inventory/user_123/use \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {JWT_TOKEN}" \
+  -d '{
+    "gameId": "game_abc_001",
+    "gameDay": 3,
+    "gameCycle": "NIGHT",
+    "inventoryItemId": "inv_item_001",
+    "targetUserId": "user_123"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Garlic Necklace activated for night protection",
+  "appliedEffects": [
+    {
+      "type": "WARD_VAMPIRE",
+      "value": 100,
+      "duration": 1,
+      "targetRole": "MAFIA"
+    }
+  ],
+  "remainingQuantity": 1,
+  "expiresAt": "2025-10-09T08:00:00Z",
+  "protectionDetails": {
+    "effectiveAgainst": ["MAFIA"],
+    "effectPercentage": 100,
+    "activeDuringCycles": ["NIGHT"]
+  }
+}
+```
+
+---
+
+## Admin Endpoints (Internal Use)
+
+### Manually Trigger Restock
+
+**Endpoint:** `POST /api/v1/admin/restock`
+
+**Description:** Manually trigger the daily restocking algorithm for all active games.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8081/api/v1/admin/restock \
+  -H "Authorization: Bearer {ADMIN_TOKEN}"
+```
+
+**Response:**
+```json
+{
+  "message": "Restock completed successfully",
+  "gamesProcessed": 5,
+  "itemsRestocked": 45,
+  "timestamp": "2025-10-08T15:00:00Z"
+}
+```
+
+---
+
+### View Transaction Logs
+
+**Endpoint:** `GET /api/v1/admin/transactions`
+
+**Description:** View all transactions with filtering options.
+
+**Query Parameters:**
+- `status` (optional): Filter by transaction status
+- `userId` (optional): Filter by user
+- `gameId` (optional): Filter by game
+- `startDate` (optional): Start date range
+- `endDate` (optional): End date range
+- `page` (optional): Page number
+- `size` (optional): Items per page
+
+**Response:**
+```json
+{
+  "transactions": [
+    {
+      "transactionId": "txn_789xyz",
+      "userId": "user_123",
+      "gameId": "game_abc_001",
+      "totalCost": 130,
+      "status": "COMPLETED",
+      "itemCount": 3,
+      "timestamp": "2025-10-08T14:30:00Z"
+    }
+  ],
+  "totalTransactions": 150,
+  "totalPages": 15,
+  "currentPage": 0
+}
+```
+---
 
 ## Roleplay Service
 
