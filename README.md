@@ -2689,9 +2689,11 @@ curl -X POST http://localhost:8081/api/v1/admin/restock \
 ```
 ---
 
-## Roleplay Service
+# Roleplay-Service
+The Mafia Platform is built using a microservices architecture, with each service encapsulating specific functionality to ensure modularity and independence. The platform enables users to play a game of Mafia with customized roles and rules.
 
-**Core responsibility:** Controls role-specific game mechanics and handles player role-based actions.
+**Responsibility**: Controls game mechanics related to player roles and actions
+
 ## Quick Start with Docker
 
 The fastest way to get started is using Docker. All services are available on Docker Hub.
@@ -2799,46 +2801,69 @@ The service will be available at `http://localhost:8082/api/v1/`
 ### Data Persistence
 The PostgreSQL database uses a named volume `postgres_data` to persist data across container restarts. The volume is automatically created when you start the services.
 
+### Alternative Setup Methods
 
+### Prerequisites
+- Java 17 or higher
+- Maven 3.6+ (or use the included Maven wrapper)
+- PostgreSQL database (or use Docker Compose)
+
+### Quick Start
+
+#### Option 1: Using the provided scripts
+For Windows:
+```bash
+run.bat
+```
+
+For Linux/Mac:
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+#### Option 2: Manual commands
+Build and run the project manually:
+```bash
+# Build the project
+./mvnw clean compile
+
+# Run the application
+./mvnw spring-boot:run
+```
+
+#### Option 3: Using Docker Compose
+If you have Docker installed, you can use the provided Docker Compose configuration:
+```bash
+docker-compose up
+```
 **Functionality**:
-- Role ability execution (e.g., Mafia kills, Sheriff investigations)
-- Role-based action validation and processing
-- Action outcome determination based on roles and item protections
-- Recording action attempts for game integrity
-- Creating filtered announcements for consumption by Game Service
-- Managing role-specific rules, constraints, and interactions
+- Role assignment and management
+- Processing role-specific actions (e.g., Mafia kills, Sheriff investigations)
+- Checking item effectiveness during actions
+- Recording all action attempts for audit purposes
+- Creating filtered announcements for the Game Service to broadcast
+- Enforcing role-specific rules and constraints
 
-### Tech stack
-
-* **Framework/language:** Java + Spring Boot (strong typing for role action logic)
-* **Database:** PostgreSQL (ACID transactions for critical role actions)
-* **Other:** Role action evaluation engine, protection status checker
-* **Communication pattern:** Internal REST API, event notifications to Game Service
-
-### Service Diagram
+### Service diagram
 
 ```mermaid
 flowchart LR
     subgraph MafiaApplication["Mafia Application"]
         RS[("Roleplay Service
         Java + Spring Boot")]
-        GS[("Game Service")]
-        SS[("Shop Service")]
     end
 
     subgraph DataPersistence["Data Persistence"]
         DB[(PostgreSQL Database)]
     end
 
-    Client["Client"]
-    
-    Client -- "Action Requests" --> RS
-    RS -- "Action Results" --> Client
-    RS -- "Role Actions Data" --> DB
-    GS -- "Game State" --> RS
-    RS -- "Action Outcomes" --> GS
-    SS -- "Item Effects" --> RS
-    RS -- "Protection Status" --> SS
+    Client["Client / Other Services"]
+
+    Client -- "HTTP/REST API Call" --> RS
+    RS -- "JSON Response" --> Client
+    RS -- "Reads/Writes roles, actions, announcements, player status" --> DB
+
 ```
 
 ### Domain Models and Interfaces
@@ -2917,6 +2942,19 @@ interface ActionResult {
 }
 ```
 
+#### Announcement
+```typescript
+interface Announcement {
+  announcementId: string;
+  gameId: string;
+  message: string;
+  visibleTo: ('ALL' | 'MAFIA' | 'TOWN' | 'SPECIFIC_ROLE' | 'SPECIFIC_USER')[];
+  targetUsers?: string[];
+  phase: 'DAY' | 'NIGHT';
+  timestamp: Date;
+}
+```
+
 ### APIs Exposed
 
 #### 1. Perform Role Action
@@ -2961,30 +2999,78 @@ interface ActionResult {
 - 404: User, game, or target not found
 - 500: Server error
 
-#### 2. Get Available Role Actions
+#### 2. Get Available Roles
 
-**Endpoint:** `GET /api/v1/actions/available`
+**Endpoint:** `GET /api/v1/roles`
 
-**Description:** Retrieves available actions for a user's role in the current game phase.
-
-**Query Parameters:**
-- `gameId` (required): The game context
-- `userId` (required): The user requesting available actions
-- `phase` (required): Game phase (DAY, NIGHT)
+**Description:** Retrieves information about all available roles in the game.
 
 **Response Format:**
 ```json
 {
-  "actions": [
+  "roles": [
     {
-      "actionType": "string",
+      "id": "string",
+      "name": "string",
+      "alignment": "TOWN|MAFIA|NEUTRAL",
       "description": "string",
-      "targets": 0,
+      "abilities": [
+        {
+          "name": "string",
+          "description": "string",
+          "usablePhase": "DAY|NIGHT|BOTH",
+          "cooldown": 0,
+          "targets": 0
+        }
+      ],
+      "winCondition": "string"
+    }
+  ]
+}
+```
+
+**Status Codes:**
+- 200: Success
+- 500: Server error
+
+#### 3. Get User Role
+
+**Endpoint:** `GET /api/v1/roles/{userId}`
+
+**Description:** Retrieves the role assigned to a specific user in a game.
+
+**Path Parameters:**
+- `userId`: Unique identifier of the user
+
+**Query Parameters:**
+- `gameId` (required): The game context for the role query
+
+**Response Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "roleName": "string",
+  "alignment": "TOWN|MAFIA|NEUTRAL",
+  "abilities": [
+    {
+      "name": "string",
+      "description": "string",
+      "usablePhase": "DAY|NIGHT|BOTH",
       "cooldown": 0,
-      "remainingCooldown": 0
+      "remainingCooldown": 0,
+      "used": false,
+      "targets": 0
     }
   ],
-  "currentPhase": "DAY|NIGHT"
+  "alive": true,
+  "protectionStatus": [
+    {
+      "type": "string",
+      "source": "string",
+      "expiresAt": "string (ISO-8601 format)"
+    }
+  ]
 }
 ```
 
@@ -2993,41 +3079,97 @@ interface ActionResult {
 - 404: User or game not found
 - 500: Server error
 
-#### 3. Verify Item Effects Against Role
+#### 4. Create Game Announcement
 
-**Endpoint:** `POST /api/v1/actions/verify-item`
+**Endpoint:** `POST /api/v1/announcements`
 
-**Description:** Verifies if an item effect is applicable against a specific role.
+**Description:** Creates a filtered game announcement based on game events.
 
 **Request Format:**
 ```json
 {
-  "itemId": "string",
-  "effectType": "string",
-  "targetRoleId": "string",
-  "gamePhase": "DAY|NIGHT"
+  "gameId": "string",
+  "eventType": "string",
+  "rawData": {
+    "key1": "value1",
+    "key2": "value2"
+  },
+  "visibleTo": ["ALL|MAFIA|TOWN|SPECIFIC_ROLE|SPECIFIC_USER"],
+  "targetUsers": ["string"],
+  "phase": "DAY|NIGHT",
+  "timestamp": "string (ISO-8601 format)"
 }
 ```
 
 **Response Format:**
 ```json
 {
-  "effective": true,
-  "effectMultiplier": 1.0,
-  "message": "Item is effective against this role"
+  "announcementId": "string",
+  "gameId": "string",
+  "message": "string",
+  "visibleTo": ["ALL|MAFIA|TOWN|SPECIFIC_ROLE|SPECIFIC_USER"],
+  "targetUsers": ["string"],
+  "phase": "DAY|NIGHT",
+  "timestamp": "string (ISO-8601 format)"
+}
+```
+
+**Status Codes:**
+- 201: Announcement created
+- 404: Game not found
+- 500: Server error
+
+#### 5. Get Action History
+
+**Endpoint:** `GET /api/v1/actions/history`
+
+**Description:** Retrieves the history of actions in a game (admin only).
+
+**Query Parameters:**
+- `gameId` (required): The game context for the action history
+
+**Response Format:**
+```json
+{
+  "actions": [
+    {
+      "actionId": "string",
+      "gameId": "string",
+      "userId": "string",
+      "roleName": "string",
+      "actionType": "string",
+      "targets": ["string"],
+      "usedItems": ["string"],
+      "gamePhase": "DAY|NIGHT",
+      "status": "PENDING|SUCCESS|FAILED|BLOCKED",
+      "results": [
+        {
+          "targetId": "string",
+          "outcome": "string",
+          "visible": true,
+          "message": "string"
+        }
+      ],
+      "timestamp": "string (ISO-8601 format)"
+    }
+  ],
+  "totalActions": 0,
+  "totalPages": 0,
+  "currentPage": 0
 }
 ```
 
 **Status Codes:**
 - 200: Success
-- 404: Item or role not found
+- 403: Unauthorized access
+- 404: Game not found
 - 500: Server error
 
-#### 4. Get Action Results
+#### 6. Get Action Results
 
 **Endpoint:** `GET /api/v1/actions/results`
 
-**Description:** Retrieves the results of actions for the current phase visible to the requesting user.
+**Description:** Retrieves the results of actions for the current phase.
 
 **Query Parameters:**
 - `gameId` (required): The game context for the action results
@@ -3042,6 +3184,8 @@ interface ActionResult {
   "results": [
     {
       "actionType": "string",
+      "actor": "string",
+      "targets": ["string"],
       "outcome": "string",
       "message": "string",
       "timestamp": "string (ISO-8601 format)"
@@ -3050,9 +3194,11 @@ interface ActionResult {
   "roleSpecificResults": [
     {
       "actionType": "string",
+      "actor": "string",
       "targets": ["string"],
       "outcome": "string",
       "message": "string",
+      "visibleTo": ["string"],
       "timestamp": "string (ISO-8601 format)"
     }
   ]
@@ -3065,31 +3211,665 @@ interface ActionResult {
 - 404: Game or user not found
 - 500: Server error
 
-### Dependencies
+#### 7. Register Protection (Shop Service Integration)
 
-* Game Service: provides game state, player roles, and cycles
-* Shop Service: item effects verification and protection status
-* User Management Service: user authentication and role validation
+**Endpoint:** `POST /api/v1/protections`
+
+**Description:** Registers a protection effect when a player uses a protective item from the Shop Service. This endpoint is called by the Shop Service when a player activates a protective item like Garlic Necklace, Holy Water, etc.
+
+**Request Format:**
+```json
+{
+  "userId": "string",
+  "gameId": "string",
+  "itemId": "string",
+  "type": "WARD_VAMPIRE|DOUSE_ARSONIST|CONCEAL_IDENTITY|BLOCK_ACTION",
+  "expiresAt": "string (ISO-8601 format)"
+}
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "message": "Protection registered successfully",
+  "protectionId": "string"
+}
+```
+
+**Status Codes:**
+- 201: Protection registered successfully
+- 404: Player role not found
+- 400: Invalid request data
+- 500: Server error
+
+**Business Logic:**
+1. Validates that the player exists in the specified game
+2. Creates a protection record linked to the player's role
+3. Sets the protection source as "SHOP_ITEM:{itemId}"
+4. Applies the protection until the specified expiration time
+5. Returns success confirmation with protection ID
+
+**Integration with Shop Service:**
+- Called when player uses item via `POST /api/v1/inventory/{userId}/use`
+- Protection is automatically checked during role actions
+- Expired protections are cleaned up automatically
+
+---
+
+#### 8. Verify Item Effectiveness
+
+**Endpoint:** `POST /api/v1/actions/verify-item`
+
+**Description:** Verifies how effective a shop item will be against specific roles or during specific game phases. This helps the Shop Service provide accurate information to players about item effectiveness.
+
+**Request Format:**
+```json
+{
+  "itemId": "string",
+  "effectType": "WARD_VAMPIRE|DOUSE_ARSONIST|CONCEAL_IDENTITY|BLOCK_ACTION|REVEAL_ROLE",
+  "targetRoleId": "string (optional)",
+  "gamePhase": "DAY|NIGHT"
+}
+```
+
+**Response Format:**
+```json
+{
+  "effective": true,
+  "effectMultiplier": 1.0,
+  "message": "Item is fully effective against this role"
+}
+```
+
+**Effect Multiplier Values:**
+- `1.0` - Fully effective (100% protection/success)
+- `0.5-0.9` - Partially effective
+- `0.0` - Not effective
+
+**Effectiveness Matrix:**
+
+| Protection Type | Effective Against | Multiplier |
+|----------------|-------------------|------------|
+| WARD_VAMPIRE | MAFIA, VAMPIRE | 1.0 |
+| WARD_VAMPIRE | NEUTRAL, TOWN | 0.0 |
+| DOUSE_ARSONIST | ARSONIST | 1.0 |
+| DOUSE_ARSONIST | NEUTRAL | 0.3 |
+| CONCEAL_IDENTITY | DETECTIVE, INVESTIGATOR | 1.0 |
+| CONCEAL_IDENTITY | SHERIFF | 0.8 |
+| CONCEAL_IDENTITY | TOWN | 0.5 |
+| BLOCK_ACTION | MAFIA, NEUTRAL | 0.5 |
+| BLOCK_ACTION | TOWN | 0.3 |
+| REVEAL_ROLE | MAFIA | 0.8 |
+| REVEAL_ROLE | NEUTRAL | 0.6 |
+
+**Status Codes:**
+- 200: Success
+- 400: Invalid request data
+- 500: Server error
+
+**Usage Examples:**
+
+1. **Check protection against specific role:**
+```json
+{
+  "itemId": "item_garlic_001",
+  "effectType": "WARD_VAMPIRE",
+  "targetRoleId": "role_mafia_001",
+  "gamePhase": "NIGHT"
+}
+```
+Response:
+```json
+{
+  "effective": true,
+  "effectMultiplier": 1.0,
+  "message": "Item is fully effective against this role"
+}
+```
+
+2. **Check general effectiveness:**
+```json
+{
+  "itemId": "item_mask_001",
+  "effectType": "CONCEAL_IDENTITY",
+  "gamePhase": "DAY"
+}
+```
+Response:
+```json
+{
+  "effective": true,
+  "effectMultiplier": 0.5,
+  "message": "Item is generally effective"
+}
+```
+
+**Integration with Shop Service:**
+- Called when displaying item details: `GET /api/v1/items/{itemId}/effectiveness`
+- Used for item recommendations: `GET /api/v1/items/recommendations`
+- Helps players make informed purchasing decisions
+
+---
 
 ### Inter-Service Communication
 
-#### Receives from Game Service:
-- Game state updates (day/night cycle)
-- Player role assignments
-- Player alive/dead status
+#### Incoming Requests from Shop Service
 
-#### Sends to Game Service:
-- Action outcomes for announcements
-- Role-based event notifications
-- Player status change requests (e.g., death from Mafia kill)
+The Roleplay Service now provides two integration endpoints for the Shop Service:
 
-#### Receives from Shop Service:
-- Item protection status for target players
-- Item effect details for action resolution
+**1. Protection Registration**
+- **Trigger:** When player uses protective item via Shop Service
+- **Flow:** Shop Service → `POST /api/v1/protections` → Roleplay Service
+- **Purpose:** Register active protection that will be checked during night actions
+- **Example:** Player uses Garlic Necklace, protection registered, prevents Mafia kill
 
-#### Sends to Shop Service:
-- Item effectiveness verification requests
-- Item usage outcome notifications
+**2. Item Effectiveness Verification**
+- **Trigger:** When displaying item details or recommendations in Shop Service
+- **Flow:** Shop Service → `POST /api/v1/actions/verify-item` → Roleplay Service
+- **Purpose:** Provide accurate effectiveness information to players
+- **Example:** Player views Garlic Necklace, sees it's 100% effective against Mafia
+
+#### Integration Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Player
+    participant ShopService
+    participant RoleplayService
+    participant Database
+
+    Note over Player,Database: Item Purchase & Usage Flow
+    
+    Player->>ShopService: POST /api/v1/inventory/{userId}/use
+    ShopService->>ShopService: Verify item in inventory
+    ShopService->>RoleplayService: POST /api/v1/actions/verify-item
+    RoleplayService-->>ShopService: Effectiveness: 100%, Effective: true
+    ShopService->>RoleplayService: POST /api/v1/protections
+    RoleplayService->>Database: Save protection record
+    RoleplayService-->>ShopService: Protection registered (ID)
+    ShopService->>ShopService: Mark item as used
+    ShopService-->>Player: Protection activated
+
+    Note over Player,Database: Later during Night Phase
+    
+    Player->>RoleplayService: POST /api/v1/actions (Mafia kill attempt)
+    RoleplayService->>Database: Check target protections
+    Database-->>RoleplayService: WARD_VAMPIRE active
+    RoleplayService->>RoleplayService: Block action (protection active)
+    RoleplayService-->>Player: Action blocked
+```
+
+---
+
+## API Endpoint Summary
+
+The Roleplay Service provides **8 public endpoints** organized into 4 categories:
+
+### Role Management (3 endpoints)
+1. `GET /api/v1/roles` - Get all available roles
+2. `GET /api/v1/roles/{userId}` - Get user's role in a game
+3. `POST /api/v1/player-roles` - Assign role to player (Admin)
+
+### Action Processing (4 endpoints)
+4. `POST /api/v1/actions` - Perform role-specific action
+5. `GET /api/v1/actions/history` - Get action history (Admin)
+6. `GET /api/v1/actions/results` - Get action results for current phase
+7. `POST /api/v1/actions/verify-item` - Verify item effectiveness (🔗 Shop Service)
+
+### Protection Management (1 endpoint)
+8. `POST /api/v1/protections` - Register protection from Shop Service (🔗 Shop Service)
+
+### Announcements (1 endpoint - Admin)
+9. `POST /api/v1/announcements` - Create game announcement
+
+🔗 = **Service Integration** - Endpoint used by external microservices
+
+---
+
+## Testing
+
+### API Testing with cURL
+
+#### 1. Test Item Effectiveness Verification
+
+```bash
+# Check if Garlic Necklace is effective against Mafia
+curl -X POST http://localhost:8082/api/v1/actions/verify-item \
+  -H "Content-Type: application/json" \
+  -d '{
+    "itemId": "item_garlic_001",
+    "effectType": "WARD_VAMPIRE",
+    "targetRoleId": "role_mafia_001",
+    "gamePhase": "NIGHT"
+  }'
+```
+
+Expected Response:
+```json
+{
+  "effective": true,
+  "effectMultiplier": 1.0,
+  "message": "Item is fully effective against this role"
+}
+```
+
+#### 2. Test Protection Registration
+
+```bash
+# Register protection when player uses protective item
+curl -X POST http://localhost:8082/api/v1/protections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "gameId": "game_abc_001",
+    "itemId": "item_garlic_001",
+    "type": "WARD_VAMPIRE",
+    "expiresAt": "2025-10-11T08:00:00Z"
+  }'
+```
+
+Expected Response:
+```json
+{
+  "success": true,
+  "message": "Protection registered successfully",
+  "protectionId": "protection_xyz_789"
+}
+```
+
+#### 3. Test Role Action
+
+```bash
+# Perform a Mafia kill action
+curl -X POST http://localhost:8082/api/v1/actions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "gameId": "game_abc_001",
+    "userId": "user_456",
+    "actionType": "KILL",
+    "targets": ["user_123"],
+    "gamePhase": "NIGHT",
+    "timestamp": "2025-10-10T22:00:00Z"
+  }'
+```
+
+Expected Response (if target has protection):
+```json
+{
+  "actionId": "action_123",
+  "status": "BLOCKED",
+  "results": [
+    {
+      "targetId": "user_123",
+      "outcome": "BLOCKED",
+      "visible": false,
+      "message": "Target was protected by WARD_VAMPIRE"
+    }
+  ],
+  "timestamp": "2025-10-10T22:00:00Z",
+  "message": "Action blocked by active protection"
+}
+```
+
+#### 4. Get User Role
+
+```bash
+# Get player's role information
+curl -X GET "http://localhost:8082/api/v1/roles/user_123?gameId=game_abc_001"
+```
+
+Expected Response:
+```json
+{
+  "userId": "user_123",
+  "gameId": "game_abc_001",
+  "roleName": "Villager",
+  "alignment": "TOWN",
+  "abilities": [],
+  "alive": true,
+  "protectionStatus": [
+    {
+      "type": "WARD_VAMPIRE",
+      "source": "SHOP_ITEM:item_garlic_001",
+      "expiresAt": "2025-10-11T08:00:00Z"
+    }
+  ]
+}
+```
+
+### Integration Testing with Shop Service
+
+#### Complete Flow Test
+
+1. **Setup prerequisite data:**
+```bash
+# Ensure player role exists
+# Ensure game is active
+# Ensure Shop Service is running on port 8081
+```
+
+2. **Purchase item from Shop:**
+```bash
+curl -X POST http://localhost:8081/api/v1/purchases \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "gameId": "game_abc_001",
+    "gameDay": 3,
+    "items": [{"itemId": "item_garlic_001", "quantity": 1}]
+  }'
+```
+
+3. **Use item (triggers protection registration):**
+```bash
+curl -X POST http://localhost:8081/api/v1/inventory/user_123/use \
+  -H "Content-Type: application/json" \
+  -d '{
+    "gameId": "game_abc_001",
+    "gameDay": 3,
+    "gameCycle": "NIGHT",
+    "inventoryItemId": "inv_item_001",
+    "targetUserId": "user_123"
+  }'
+```
+
+4. **Verify protection was registered:**
+```bash
+curl -X GET "http://localhost:8082/api/v1/roles/user_123?gameId=game_abc_001"
+# Check protectionStatus in response
+```
+
+5. **Test protection during action:**
+```bash
+# Attempt kill action against protected player
+curl -X POST http://localhost:8082/api/v1/actions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "gameId": "game_abc_001",
+    "userId": "mafia_user",
+    "actionType": "KILL",
+    "targets": ["user_123"],
+    "gamePhase": "NIGHT"
+  }'
+# Should return BLOCKED status
+```
+
+### Unit Testing
+
+```bash
+# Run all tests
+./mvnw test
+
+# Run specific test class
+./mvnw test -Dtest=ProtectionServiceTest
+
+# Run with coverage
+./mvnw test jacoco:report
+# View coverage at target/site/jacoco/index.html
+```
+
+### Test Coverage
+
+The service includes comprehensive tests for:
+- ✅ Protection registration and validation
+- ✅ Item effectiveness calculation
+- ✅ Role action processing with protections
+- ✅ Protection expiration cleanup
+- ✅ Integration with Shop Service endpoints
+- ✅ Error handling and edge cases
+
+---
+
+## Configuration
+
+### Application Properties
+
+```properties
+# Server Configuration
+server.port=${SERVER_PORT:8082}
+spring.application.name=roleplay-service
+
+# Database Configuration
+spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mydatabase}
+spring.datasource.username=${DB_USERNAME:myuser}
+spring.datasource.password=${DB_PASSWORD:secret}
+spring.jpa.hibernate.ddl-auto=${JPA_DDL_AUTO:update}
+spring.jpa.show-sql=${JPA_SHOW_SQL:true}
+spring.jpa.properties.hibernate.format_sql=true
+
+# Connection Pool
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.minimum-idle=5
+spring.datasource.hikari.connection-timeout=30000
+
+# Logging
+logging.level.root=INFO
+logging.level.com.mafia.roleplay_service=DEBUG
+logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %msg%n
+
+# CORS Configuration
+cors.allowed-origins=*
+cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
+cors.allowed-headers=*
+
+# Protection Cleanup Schedule (runs daily at midnight)
+protection.cleanup.cron=0 0 0 * * *
+```
+
+### Environment Variables
+
+Create a `.env` file for local development:
+
+```env
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=roleplay_db
+DB_USERNAME=roleplay_user
+DB_PASSWORD=your_secure_password
+
+# Server Configuration
+SERVER_PORT=8082
+
+# JPA Configuration
+JPA_DDL_AUTO=update
+JPA_SHOW_SQL=true
+
+# External Services (for future integration)
+GAME_SERVICE_URL=http://localhost:3000
+SHOP_SERVICE_URL=http://localhost:8081
+```
+
+---
+
+## Database Schema
+
+### Core Tables
+
+```sql
+-- Roles table (predefined game roles)
+CREATE TABLE roles (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    alignment VARCHAR(20) NOT NULL,
+    description TEXT,
+    win_condition TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Abilities table (role abilities)
+CREATE TABLE abilities (
+    id VARCHAR(36) PRIMARY KEY,
+    role_id VARCHAR(36) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    usable_phase VARCHAR(20) NOT NULL,
+    cooldown INTEGER DEFAULT 0,
+    targets INTEGER DEFAULT 1,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+
+-- Player roles (assigned to users in games)
+CREATE TABLE player_roles (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    game_id VARCHAR(36) NOT NULL,
+    role_id VARCHAR(36) NOT NULL,
+    alive BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (role_id) REFERENCES roles(id),
+    UNIQUE KEY unique_user_game (user_id, game_id),
+    INDEX idx_game (game_id),
+    INDEX idx_user (user_id)
+);
+
+-- Player abilities (tracking cooldowns and usage)
+CREATE TABLE player_abilities (
+    id VARCHAR(36) PRIMARY KEY,
+    player_role_id VARCHAR(36) NOT NULL,
+    ability_id VARCHAR(36) NOT NULL,
+    remaining_cooldown INTEGER DEFAULT 0,
+    used BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (player_role_id) REFERENCES player_roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (ability_id) REFERENCES abilities(id)
+);
+
+-- Protections (Shop Service integration)
+CREATE TABLE protections (
+    id VARCHAR(36) PRIMARY KEY,
+    player_role_id VARCHAR(36) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    source VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (player_role_id) REFERENCES player_roles(id) ON DELETE CASCADE,
+    INDEX idx_expiration (expires_at),
+    INDEX idx_player (player_role_id)
+);
+
+-- Actions (game actions performed by players)
+CREATE TABLE actions (
+    id VARCHAR(36) PRIMARY KEY,
+    game_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    action_type VARCHAR(50) NOT NULL,
+    game_phase VARCHAR(20) NOT NULL,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_game_phase (game_id, game_phase),
+    INDEX idx_user (user_id)
+);
+
+-- Action results
+CREATE TABLE action_results (
+    id VARCHAR(36) PRIMARY KEY,
+    action_id VARCHAR(36) NOT NULL,
+    target_id VARCHAR(36) NOT NULL,
+    outcome VARCHAR(50) NOT NULL,
+    visible BOOLEAN DEFAULT TRUE,
+    message TEXT,
+    FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE
+);
+
+-- Announcements
+CREATE TABLE announcements (
+    id VARCHAR(36) PRIMARY KEY,
+    game_id VARCHAR(36) NOT NULL,
+    message TEXT NOT NULL,
+    phase VARCHAR(20) NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_game (game_id)
+);
+```
+
+### Seed Data (Included in Docker Image)
+
+The database initialization scripts include:
+
+**Roles:**
+- Town: Villager, Doctor, Detective, Sheriff
+- Mafia: Godfather, Goon
+- Neutral: Survivor, Jester
+
+**Abilities:**
+- Doctor: Heal (NIGHT, targets: 1)
+- Detective: Investigate (NIGHT, targets: 1)
+- Mafia: Kill (NIGHT, targets: 1)
+- And more...
+
+---
+
+## Error Handling
+
+### Error Response Format
+
+All endpoints return standardized error responses:
+
+```json
+{
+  "timestamp": "2025-10-10T12:00:00Z",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Player role not found for user user_123 in game game_abc_001",
+  "path": "/api/v1/protections"
+}
+```
+
+### Common Error Codes
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | Bad Request | Invalid request data or validation failure |
+| 404 | Not Found | Resource not found (player, role, game) |
+| 409 | Conflict | Duplicate resource or conflicting state |
+| 500 | Internal Server Error | Unexpected server error |
+
+### Shop Service Integration Errors
+
+**Protection Registration Errors:**
+
+1. **Player Not Found:**
+```json
+{
+  "status": 404,
+  "error": "ResourceNotFoundException",
+  "message": "Player role not found for user user_123 in game game_abc_001"
+}
+```
+**Solution:** Ensure player role is assigned before registering protection
+
+2. **Invalid Protection Type:**
+```json
+{
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Protection type is required"
+}
+```
+**Solution:** Verify protection type is one of: WARD_VAMPIRE, DOUSE_ARSONIST, CONCEAL_IDENTITY, BLOCK_ACTION
+
+**Item Effectiveness Verification Errors:**
+
+1. **Unknown Effect Type:**
+```json
+{
+  "effective": false,
+  "effectMultiplier": 0.0,
+  "message": "Unknown protection type: INVALID_TYPE"
+}
+```
+**Solution:** Use valid effect types defined in the effectiveness matrix
+
+2. **Role Not Found:**
+```json
+{
+  "effective": false,
+  "effectMultiplier": 0.0,
+  "message": "Target role not found"
+}
+```
+**Solution:** Verify targetRoleId exists in the roles table
 
 ## Rumors Service
 
