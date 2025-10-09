@@ -94,6 +94,25 @@ services:
     networks:
       - mafia-network
 
+  # PostgreSQL for Roleplay Service
+  roleplay-service-db:
+    image: cebanvasile1/roleplay-postgres:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: mydatabase
+      LANG: en_US.utf8
+    volumes:
+      - roleplay_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
   # =================================================================
   # APPLICATION SERVICES
   # =================================================================
@@ -273,6 +292,48 @@ services:
     networks:
       - mafia-network
 
+  # Roleplay Service (Spring Boot + Java)
+  roleplay-service:
+    image: cebanvasile1/roleplay-service:latest
+    restart: unless-stopped
+    depends_on:
+      roleplay-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      DB_HOST: roleplay-service-db
+      DB_PORT: 5432
+      DB_NAME: mydatabase
+      DB_USERNAME: myuser
+      DB_PASSWORD: secret
+      # Application configuration
+      SERVER_PORT: 8082
+      JPA_DDL_AUTO: update
+      JPA_SHOW_SQL: true
+      LOG_LEVEL_WEB: DEBUG
+      LOG_LEVEL_APP: DEBUG
+      # Service URLs for inter-service communication
+      USER_SERVICE_URL: http://user-management-service:3000
+      GAME_SERVICE_URL: http://game-service:3001
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8082/actuator/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - mafia-network
+
 # =================================================================
 # NETWORKS AND VOLUMES
 # =================================================================
@@ -287,6 +348,8 @@ volumes:
   voting_service_data:
     driver: local
   shop_service_data:
+    driver: local
+  roleplay_service_data:
     driver: local
 
 networks:
