@@ -81,13 +81,13 @@ services:
     image: cebanvasile1/shop-service-db:latest
     restart: unless-stopped
     environment:
-      POSTGRES_USER: shop_user
-      POSTGRES_PASSWORD: shop_password
-      POSTGRES_DB: shop_service_db
+      POSTGRES_USER: ${SHOP_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${SHOP_SERVICE_POSTGRES_DB}
     volumes:
       - shop_service_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_service_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${SHOP_SERVICE_POSTGRES_USER} -d ${SHOP_SERVICE_POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -99,14 +99,14 @@ services:
     image: cebanvasile1/roleplay-postgres:latest
     restart: unless-stopped
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: mydatabase
+      POSTGRES_USER: ${ROLEPLAY_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ROLEPLAY_SERVICE_POSTGRES_DB}
       LANG: en_US.utf8
     volumes:
       - roleplay_service_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
+      test: ["CMD-SHELL", "pg_isready -U ${ROLEPLAY_SERVICE_POSTGRES_USER} -d ${ROLEPLAY_SERVICE_POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -270,13 +270,13 @@ services:
         condition: service_healthy
     environment:
       # Spring Boot database configuration
-      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:5432/shop_service_db
-      SPRING_DATASOURCE_USERNAME: shop_user
-      SPRING_DATASOURCE_PASSWORD: shop_password
+      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:5432/${SHOP_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
       # Service URLs for inter-service communication
-      CHARACTER_SERVICE_URL: http://user-management-service:3000
-      ROLEPLAY_SERVICE_URL: http://game-service:3001
-      TASK_SERVICE_URL: http://task-service:3002
+      CHARACTER_SERVICE_URL: ${CHARACTER_SERVICE_URL}
+      ROLEPLAY_SERVICE_URL: ${GAME_SERVICE_URL}
+      TASK_SERVICE_URL: ${TASK_SERVICE_URL}
     ports:
       - "8081:8081"
     healthcheck:
@@ -306,19 +306,19 @@ services:
     environment:
       # Database configuration
       DB_HOST: roleplay-service-db
-      DB_PORT: 5432
-      DB_NAME: mydatabase
-      DB_USERNAME: myuser
-      DB_PASSWORD: secret
+      DB_PORT: ${ROLEPLAY_SERVICE_POSTGRES_PORT}
+      DB_NAME: ${ROLEPLAY_SERVICE_POSTGRES_DB}
+      DB_USERNAME: ${ROLEPLAY_SERVICE_POSTGRES_USER}
+      DB_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
       # Application configuration
-      SERVER_PORT: 8082
-      JPA_DDL_AUTO: update
-      JPA_SHOW_SQL: true
-      LOG_LEVEL_WEB: DEBUG
-      LOG_LEVEL_APP: DEBUG
+      SERVER_PORT: ${ROLEPLAY_SERVICE_PORT}
+      JPA_DDL_AUTO: ${ROLEPLAY_SERVICE_JPA_DDL_AUTO}
+      JPA_SHOW_SQL: ${ROLEPLAY_SERVICE_JPA_SHOW_SQL}
+      LOG_LEVEL_WEB: ${ROLEPLAY_SERVICE_LOG_LEVEL_WEB}
+      LOG_LEVEL_APP: ${ROLEPLAY_SERVICE_LOG_LEVEL_APP}
       # Service URLs for inter-service communication
-      USER_SERVICE_URL: http://user-management-service:3000
-      GAME_SERVICE_URL: http://game-service:3001
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      GAME_SERVICE_URL: ${GAME_SERVICE_URL}
     ports:
       - "8082:8082"
     healthcheck:
