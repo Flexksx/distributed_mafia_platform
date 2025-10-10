@@ -75,6 +75,43 @@ services:
     networks:
       - mafia-network
 
+  # PostgreSQL for Shop Service
+  shop-service-db:
+    image: cebanvasile1/shop-service-db:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SHOP_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${SHOP_SERVICE_POSTGRES_DB}
+    volumes:
+      - shop_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
+  # PostgreSQL for Roleplay Service
+  roleplay-service-db:
+    image: cebanvasile1/roleplay-postgres:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${ROLEPLAY_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ROLEPLAY_SERVICE_POSTGRES_DB}
+      LANG: en_US.utf8
+    volumes:
+      - roleplay_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
   # =================================================================
   # APPLICATION SERVICES
   # =================================================================
@@ -101,10 +138,10 @@ services:
           "CMD-SHELL",
           "wget -qO- http://localhost:$$PORT/v1/users >/dev/null 2>&1 || exit 1",
         ]
-      interval: 15s
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 20s
     networks:
       - mafia-network
 
@@ -214,6 +251,87 @@ services:
     user: root
     command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
+  # Shop Service (Spring Boot + Java)
+  shop-service:
+    image: cebanvasile1/shop-service:latest
+    restart: unless-stopped
+    depends_on:
+      shop-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+    environment:
+      # Spring Boot database configuration
+      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
+      # Service URLs for inter-service communication
+      CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
+      ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
+      TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+    ports:
+      - "${SHOP_SERVICE_PORT}:${SHOP_SERVICE_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:$$SHOP_SERVICE_PORT/actuator/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - mafia-network
+
+  # Roleplay Service (Spring Boot + Java)
+  roleplay-service:
+    image: cebanvasile1/roleplay-service:latest
+    restart: unless-stopped
+    depends_on:
+      roleplay-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+    environment:
+      # Database configuration
+      DB_HOST: roleplay-service-db
+      DB_PORT: ${ROLEPLAY_SERVICE_POSTGRES_PORT}
+      DB_NAME: ${ROLEPLAY_SERVICE_POSTGRES_DB}
+      DB_USERNAME: ${ROLEPLAY_SERVICE_POSTGRES_USER}
+      DB_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
+      # Application configuration
+      SERVER_PORT: ${ROLEPLAY_SERVICE_PORT}
+      JPA_DDL_AUTO: update
+      JPA_SHOW_SQL: true
+      LOG_LEVEL_WEB: DEBUG
+      LOG_LEVEL_APP: DEBUG
+      # Service URLs for inter-service communication
+      USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
+      GAME_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+    ports:
+      - "${ROLEPLAY_SERVICE_PORT}:${ROLEPLAY_SERVICE_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - mafia-network
+
   # =====
   # GATEWAY
   # =====
@@ -264,6 +382,10 @@ volumes:
   task_service_data:
     driver: local
   voting_service_data:
+    driver: local
+  shop_service_data:
+    driver: local
+  roleplay_service_data:
     driver: local
 
 networks:
