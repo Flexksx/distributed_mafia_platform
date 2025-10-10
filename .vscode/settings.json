@@ -1,0 +1,30 @@
+{
+  // Use explicit Jest profiles to support multiple package roots in this repo
+  "jest.profiles": [
+    {
+      "name": "user-management-service",
+      "rootPath": "mafia_user_management_service",
+      "jestCommandLine": "npm test --"
+    },
+    {
+      "name": "game-service",
+      "rootPath": "mafia_game_service",
+      "jestCommandLine": "npm test --"
+    }
+  ],
+
+  // Set a default root so the extension doesn't try to autodetect across multiple roots
+  "jest.rootPath": "mafia_user_management_service",
+  "jest.jestCommandLine": "npm test --",
+
+  // Keep your preferred run/output behavior
+  "jest.runMode": {
+    "type": "on-demand"
+  },
+  "jest.outputConfig": {
+    "revealOn": "run",
+    "revealWithFocus": "test-results",
+    "clearOnRun": "none"
+  },
+  "testing.automaticallyOpenTestResults": "openOnTestStart"
+}

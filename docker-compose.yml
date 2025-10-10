@@ -8,13 +8,13 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: mafia_user
-      POSTGRES_PASSWORD: mafia_secure_password
-      POSTGRES_DB: mafia_users
+      POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${USER_SERVICE_POSTGRES_DB}
     volumes:
       - user_management_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mafia_user -d mafia_users"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,13 +26,13 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: mafia_game_user
-      POSTGRES_PASSWORD: mafia_game_secure_password
-      POSTGRES_DB: mafia_game
+      POSTGRES_USER: ${GAME_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
     volumes:
       - game_service_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mafia_game_user -d mafia_game"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,13 +44,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: task_service_user
-      POSTGRES_PASSWORD: task_service_secure_password
-      POSTGRES_DB: task_service_db
+      POSTGRES_USER: ${TASK_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TASK_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TASK_SERVICE_POSTGRES_DB}
     volumes:
       - task_service_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U task_service_user -d task_service_db"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -62,14 +62,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: voting_service_user
-      POSTGRES_PASSWORD: voting_service_secure_password
-      POSTGRES_DB: voting_service_db
+      POSTGRES_USER: ${VOTING_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${VOTING_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${VOTING_SERVICE_POSTGRES_DB}
     volumes:
       - voting_service_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        ["CMD-SHELL", "pg_isready -U voting_service_user -d voting_service_db"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -81,13 +80,13 @@ services:
     image: cebanvasile1/shop-service-db:latest
     restart: unless-stopped
     environment:
-      POSTGRES_USER: shop_user
-      POSTGRES_PASSWORD: shop_password
-      POSTGRES_DB: shop_service_db
+      POSTGRES_USER: ${SHOP_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${SHOP_SERVICE_POSTGRES_DB}
     volumes:
       - shop_service_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_service_db"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -99,14 +98,14 @@ services:
     image: cebanvasile1/roleplay-postgres:latest
     restart: unless-stopped
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: mydatabase
+      POSTGRES_USER: ${ROLEPLAY_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ROLEPLAY_SERVICE_POSTGRES_DB}
       LANG: en_US.utf8
     volumes:
       - roleplay_service_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -125,25 +124,24 @@ services:
       user-management-db:
         condition: service_healthy
     environment:
-      PORT: 3000
+      PORT: ${USER_SERVICE_PORT}
       NODE_ENV: production
-      DATABASE_URL: postgresql://mafia_user:mafia_secure_password@user-management-db:5432/mafia_users?schema=public
-      POSTGRES_USER: mafia_user
-      POSTGRES_PASSWORD: mafia_secure_password
-      POSTGRES_DB: mafia_users
-      POSTGRES_PORT: 5432
-    ports:
-      - "3000:3000"
+      DATABASE_URL: postgresql://${USER_SERVICE_POSTGRES_USER}:${USER_SERVICE_POSTGRES_PASSWORD}@user-management-db:${USER_SERVICE_POSTGRES_PORT}/${USER_SERVICE_POSTGRES_DB}?schema=public
+      POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${USER_SERVICE_POSTGRES_DB}
+      POSTGRES_PORT: ${USER_SERVICE_POSTGRES_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:3000/v1/users >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$PORT/v1/users >/dev/null 2>&1 || exit 1",
         ]
-      interval: 15s
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 20s
     networks:
       - mafia-network
 
@@ -157,23 +155,20 @@ services:
       user-management-service:
         condition: service_healthy
     environment:
-      PORT: 3001
+      PORT: ${GAME_SERVICE_PORT}
       NODE_ENV: production
-      USER_SERVICE_URL: http://user-management-service:3000
-      # Prisma database connection
-      DATABASE_URL: postgresql://mafia_game_user:mafia_game_secure_password@game-service-db:5432/mafia_game?schema=public
-      # Additional database config for compatibility
-      POSTGRES_USER: mafia_game_user
-      POSTGRES_PASSWORD: mafia_game_secure_password
-      POSTGRES_DB: mafia_game
-      POSTGRES_PORT: 5432
-    ports:
-      - "3001:3001"
+      USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
+      DATABASE_URL: postgresql://${GAME_SERVICE_POSTGRES_USER}:${GAME_SERVICE_POSTGRES_PASSWORD}@game-service-db:${GAME_SERVICE_POSTGRES_PORT}/${GAME_SERVICE_POSTGRES_DB}?schema=public
+      POSTGRES_USER: ${GAME_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
+      POSTGRES_PORT: ${GAME_SERVICE_POSTGRES_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:3001/v1/lobby >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$PORT/v1/lobby >/dev/null 2>&1 || exit 1",
         ]
       interval: 15s
       timeout: 5s
@@ -194,18 +189,19 @@ services:
       user-management-service:
         condition: service_healthy
     environment:
-      PORT: 3002
+      PORT: ${TASK_SERVICE_PORT}
       NODE_ENV: production
-      DATABASE_URL: postgresql://task_service_user:task_service_secure_password@task-service-db:5432/task_service_db?schema=public
-      APP_PORT: 3002
+      DATABASE_URL: postgresql://${TASK_SERVICE_POSTGRES_USER}:${TASK_SERVICE_POSTGRES_PASSWORD}@task-service-db:${TASK_SERVICE_POSTGRES_PORT}/${TASK_SERVICE_POSTGRES_DB}?schema=public
+      APP_PORT: ${TASK_SERVICE_PORT}
       JWT_SECRET: production-jwt-secret-change-me
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     ports:
-      - "3002:3002"
+      - "${TASK_SERVICE_PORT}:${TASK_SERVICE_PORT}"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:3002/health >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$APP_PORT/health >/dev/null 2>&1 || exit 1",
         ]
       interval: 30s
       timeout: 10s
@@ -231,19 +227,20 @@ services:
       task-service:
         condition: service_healthy
     environment:
-      PORT: 3003
+      PORT: ${VOTING_SERVICE_PORT}
       NODE_ENV: production
-      DATABASE_URL: postgresql://voting_service_user:voting_service_secure_password@voting-service-db:5432/voting_service_db?schema=public
-      APP_PORT: 3003
+      DATABASE_URL: postgresql://${VOTING_SERVICE_POSTGRES_USER}:${VOTING_SERVICE_POSTGRES_PASSWORD}@voting-service-db:${VOTING_SERVICE_POSTGRES_PORT}/${VOTING_SERVICE_POSTGRES_DB}?schema=public
+      APP_PORT: ${VOTING_SERVICE_PORT}
       JWT_SECRET: production-jwt-secret-change-me
       TIE_BREAK_METHOD: RANDOM
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     ports:
-      - "3003:3003"
+      - "${VOTING_SERVICE_PORT}:${VOTING_SERVICE_PORT}"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:3003/health >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$APP_PORT/health >/dev/null 2>&1 || exit 1",
         ]
       interval: 30s
       timeout: 10s
@@ -251,7 +248,6 @@ services:
       start_period: 60s
     networks:
       - mafia-network
-    # Run migrations as root, then switch to nodejs user for the app
     user: root
     command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
@@ -270,20 +266,21 @@ services:
         condition: service_healthy
     environment:
       # Spring Boot database configuration
-      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:5432/shop_service_db
-      SPRING_DATASOURCE_USERNAME: shop_user
-      SPRING_DATASOURCE_PASSWORD: shop_password
+      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
       # Service URLs for inter-service communication
-      CHARACTER_SERVICE_URL: http://user-management-service:3000
-      ROLEPLAY_SERVICE_URL: http://game-service:3001
-      TASK_SERVICE_URL: http://task-service:3002
+      CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
+      ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
+      TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     ports:
-      - "8081:8081"
+      - "${SHOP_SERVICE_PORT}:${SHOP_SERVICE_PORT}"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$SHOP_SERVICE_PORT/actuator/health >/dev/null 2>&1 || exit 1",
         ]
       interval: 15s
       timeout: 5s
@@ -306,31 +303,70 @@ services:
     environment:
       # Database configuration
       DB_HOST: roleplay-service-db
-      DB_PORT: 5432
-      DB_NAME: mydatabase
-      DB_USERNAME: myuser
-      DB_PASSWORD: secret
+      DB_PORT: ${ROLEPLAY_SERVICE_POSTGRES_PORT}
+      DB_NAME: ${ROLEPLAY_SERVICE_POSTGRES_DB}
+      DB_USERNAME: ${ROLEPLAY_SERVICE_POSTGRES_USER}
+      DB_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
       # Application configuration
-      SERVER_PORT: 8082
+      SERVER_PORT: ${ROLEPLAY_SERVICE_PORT}
       JPA_DDL_AUTO: update
       JPA_SHOW_SQL: true
       LOG_LEVEL_WEB: DEBUG
       LOG_LEVEL_APP: DEBUG
       # Service URLs for inter-service communication
-      USER_SERVICE_URL: http://user-management-service:3000
-      GAME_SERVICE_URL: http://game-service:3001
+      USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
+      GAME_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     ports:
-      - "8082:8082"
+      - "${ROLEPLAY_SERVICE_PORT}:${ROLEPLAY_SERVICE_PORT}"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:8082/actuator/health >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
         ]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - mafia-network
+
+  # =====
+  # GATEWAY
+  # =====
+  gateway:
+    image: flexksx/mafia_api_gateway:main
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
+    environment:
+      PORT: ${GATEWAY_PORT}
+      USER_SERVICE_URL: "http://user-management-service:${USER_SERVICE_PORT}"
+      GAME_SERVICE_URL: "http://game-service:${GAME_SERVICE_PORT}"
+      TASK_SERVICE_URL: "http://task-service:${TASK_SERVICE_PORT}"
+      VOTING_SERVICE_URL: "http://voting-service:${VOTING_SERVICE_PORT}"
+      HTTP_TIMEOUT_SECONDS: "5"
+      MAX_CONCURRENCY: "200"
+    depends_on:
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+      voting-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:$$PORT/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - mafia-network
 
