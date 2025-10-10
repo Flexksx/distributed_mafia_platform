@@ -116,6 +116,23 @@ services:
   # APPLICATION SERVICES
   # =================================================================
 
+  # Redis Cache for Gateway
+  gateway-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379" # Expose Redis to localhost
+    volumes:
+      - gateway_cache_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
   # User Management Service (Express.js + TypeScript)
   user-management-service:
     image: flexksx/mafia_user_management_service:latest
@@ -338,6 +355,17 @@ services:
   gateway:
     image: flexksx/mafia_api_gateway:main
     restart: unless-stopped
+    depends_on:
+      gateway-cache:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+      voting-service:
+        condition: service_healthy
     ports:
       - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     environment:
@@ -349,18 +377,13 @@ services:
       JWT_SECRET: ${GATEWAY_JWT_SECRET}
       JWT_ALGORITHM: ${GATEWAY_JWT_ALGORITHM}
       JWT_EXPIRES_SECONDS: ${GATEWAY_JWT_EXPIRES_SECONDS}
-      SERVICE_TO_SERVICE_SECRET: ${SERVICE_TO_SERVICE_SECRET}
+      SERVICE_TO_SERVICE_SECRET: ${GATEWAY_SERVICE_TO_SERVICE_SECRET}
+      REDIS_HOST: gateway-cache
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      CACHE_TTL_SECONDS: ${GATEWAY_CACHE_TTL_SECONDS}
       HTTP_TIMEOUT_SECONDS: "5"
       MAX_CONCURRENCY: "200"
-    depends_on:
-      user-management-service:
-        condition: service_healthy
-      game-service:
-        condition: service_healthy
-      task-service:
-        condition: service_healthy
-      voting-service:
-        condition: service_healthy
     healthcheck:
       test:
         [
@@ -390,6 +413,8 @@ volumes:
   shop_service_data:
     driver: local
   roleplay_service_data:
+    driver: local
+  gateway_cache_data:
     driver: local
 
 networks:
