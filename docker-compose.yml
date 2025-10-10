@@ -8,9 +8,9 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: mafia_user
-      POSTGRES_PASSWORD: mafia_secure_password
-      POSTGRES_DB: mafia_users
+      POSTGRES_USER: "{{USER_SERVICE_POSTGRES_USER}}"
+      POSTGRES_PASSWORD: "{{USER_SERVICE_POSTGRES_PASSWORD}}"
+      POSTGRES_DB: "{{USER_SERVICE_POSTGRES_DB}}"
     volumes:
       - user_management_data:/var/lib/postgresql/data
     healthcheck:
@@ -26,9 +26,9 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: mafia_game_user
-      POSTGRES_PASSWORD: mafia_game_secure_password
-      POSTGRES_DB: mafia_game
+      POSTGRES_USER: "{{GAME_SERVICE_POSTGRES_USER}}"
+      POSTGRES_PASSWORD: "{{GAME_SERVICE_POSTGRES_PASSWORD}}"
+      POSTGRES_DB: "{{GAME_SERVICE_POSTGRES_DB}}"
     volumes:
       - game_service_data:/var/lib/postgresql/data
     healthcheck:
@@ -95,8 +95,6 @@ services:
       POSTGRES_PASSWORD: mafia_secure_password
       POSTGRES_DB: mafia_users
       POSTGRES_PORT: 5432
-    ports:
-      - "3000:3000"
     healthcheck:
       test:
         [
@@ -217,6 +215,43 @@ services:
     # Run migrations as root, then switch to nodejs user for the app
     user: root
     command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
+
+  # =====
+  # GATEWAY
+  # =====
+  gateway:
+    image: flexksx/mafia_api_gateway:main
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      USER_SERVICE_URL: "http://user-management-service:3000"
+      GAME_SERVICE_URL: "http://game-service:3001"
+      TASK_SERVICE_URL: "http://task-service:3002"
+      VOTING_SERVICE_URL: "http://voting-service:3003"
+      HTTP_TIMEOUT_SECONDS: "5"
+      MAX_CONCURRENCY: "200"
+    depends_on:
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+      voting-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - mafia-network
 
 # =================================================================
 # NETWORKS AND VOLUMES
