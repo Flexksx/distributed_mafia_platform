@@ -47,6 +47,8 @@ services:
       POSTGRES_USER: ${TASK_SERVICE_POSTGRES_USER}
       POSTGRES_PASSWORD: ${TASK_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${TASK_SERVICE_POSTGRES_DB}
+    ports:
+      - "5001:5432"
     volumes:
       - task_service_data:/var/lib/postgresql/data
     healthcheck:
@@ -65,6 +67,8 @@ services:
       POSTGRES_USER: ${VOTING_SERVICE_POSTGRES_USER}
       POSTGRES_PASSWORD: ${VOTING_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${VOTING_SERVICE_POSTGRES_DB}
+    ports:
+      - "5002:5432"
     volumes:
       - voting_service_data:/var/lib/postgresql/data
     healthcheck:
@@ -78,6 +82,7 @@ services:
   # PostgreSQL for Shop Service
   shop-service-db:
     image: cebanvasile1/shop-service-db:latest
+    platform: linux/amd64
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${SHOP_SERVICE_POSTGRES_USER}
@@ -96,6 +101,7 @@ services:
   # PostgreSQL for Roleplay Service
   roleplay-service-db:
     image: cebanvasile1/roleplay-postgres:latest
+    platform: linux/amd64
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${ROLEPLAY_SERVICE_POSTGRES_USER}
@@ -180,6 +186,7 @@ services:
       POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
       POSTGRES_PORT: ${GAME_SERVICE_POSTGRES_PORT}
+      CROSS_SERVICE_API_KEY: ${CROSS_SERVICE_API_KEY}
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     healthcheck:
       test:
@@ -228,7 +235,7 @@ services:
       - mafia-network
     # Run migrations as root, then switch to nodejs user for the app
     user: root
-    command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
+    command: sh -c "npx prisma db push --skip-generate --force-reset --accept-data-loss && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
   # Voting Service (Express.js + TypeScript + Prisma)
   voting-service:
@@ -266,11 +273,12 @@ services:
     networks:
       - mafia-network
     user: root
-    command: sh -c "npx prisma db push --skip-generate && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
+    command: sh -c "npx prisma db push --skip-generate --force-reset --accept-data-loss && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
   # Shop Service (Spring Boot + Java)
   shop-service:
     image: cebanvasile1/shop-service:latest
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       shop-service-db:
@@ -309,6 +317,7 @@ services:
   # Roleplay Service (Spring Boot + Java)
   roleplay-service:
     image: cebanvasile1/roleplay-service:latest
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       roleplay-service-db:
