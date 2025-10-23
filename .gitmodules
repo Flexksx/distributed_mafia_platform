@@ -35,3 +35,6 @@
 [submodule "mafia_api_gateway"]
 	path = mafia_api_gateway
 	url = git@github.com:Flexksx/mafia_api_gateway.git
+[submodule "mafia_service_discovery"]
+	path = mafia_service_discovery
+	url = git@github.com:Flexksx/mafia_service_discovery.git

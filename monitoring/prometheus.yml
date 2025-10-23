@@ -1,0 +1,62 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Service Discovery Service
+  - job_name: 'service-discovery'
+    static_configs:
+      - targets: ['service-discovery:3004']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Gateway Service (if it exposes metrics)
+  - job_name: 'gateway'
+    static_configs:
+      - targets: ['gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # User Management Service (if it exposes metrics)
+  - job_name: 'user-management'
+    static_configs:
+      - targets: ['user-management-service:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Game Service (if it exposes metrics)
+  - job_name: 'game-service'
+    static_configs:
+      - targets: ['game-service:3001']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Task Service (if it exposes metrics)
+  - job_name: 'task-service'
+    static_configs:
+      - targets: ['task-service:3002']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Voting Service (if it exposes metrics)
+  - job_name: 'voting-service'
+    static_configs:
+      - targets: ['voting-service:3003']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Service Discovery Health Checks
+  - job_name: 'service-discovery-health'
+    static_configs:
+      - targets: ['service-discovery:3004']
+    metrics_path: '/health'
+    scrape_interval: 30s

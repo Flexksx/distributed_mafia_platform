@@ -6,6 +6,7 @@ services:
   # PostgreSQL for User Management Service
   user-management-db:
     image: postgres:16
+    platform: linux/amd64
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
@@ -24,6 +25,7 @@ services:
   # PostgreSQL for Game Service
   game-service-db:
     image: postgres:16
+    platform: linux/amd64
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${GAME_SERVICE_POSTGRES_USER}
@@ -42,6 +44,7 @@ services:
   # PostgreSQL for Task Service
   task-service-db:
     image: postgres:16-alpine
+    platform: linux/amd64
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${TASK_SERVICE_POSTGRES_USER}
@@ -62,6 +65,7 @@ services:
   # PostgreSQL for Voting Service
   voting-service-db:
     image: postgres:16-alpine
+    platform: linux/amd64
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${VOTING_SERVICE_POSTGRES_USER}
@@ -125,6 +129,7 @@ services:
   # Redis Cache for Gateway
   gateway-cache:
     image: redis:7-alpine
+    platform: linux/amd64
     restart: unless-stopped
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
@@ -142,7 +147,10 @@ services:
   # User Management Service (Express.js + TypeScript)
   user-management-service:
     image: flexksx/mafia_user_management_service:latest
+    platform: linux/amd64
     restart: unless-stopped
+    deploy:
+      replicas: 2
     depends_on:
       user-management-db:
         condition: service_healthy
@@ -171,7 +179,10 @@ services:
   # Game Service (Express.js + TypeScript)
   game-service:
     image: flexksx/mafia-game-service:latest
+    platform: linux/amd64
     restart: unless-stopped
+    deploy:
+      replicas: 2
     depends_on:
       game-service-db:
         condition: service_healthy
@@ -186,7 +197,7 @@ services:
       POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
       POSTGRES_PORT: ${GAME_SERVICE_POSTGRES_PORT}
-      CROSS_SERVICE_API_KEY: ${CROSS_SERVICE_API_KEY}
+      CROSS_SERVICE_API_KEY: ${GATEWAY_SERVICE_TO_SERVICE_SECRET}
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
     healthcheck:
       test:
@@ -204,6 +215,7 @@ services:
   # Task Service (Express.js + TypeScript + Prisma)
   task-service:
     image: rayderr/mafia_liviu_task_service:latest
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       task-service-db:
@@ -240,6 +252,7 @@ services:
   # Voting Service (Express.js + TypeScript + Prisma)
   voting-service:
     image: rayderr/mafia_liviu_voting_service:latest
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       voting-service-db:
@@ -363,6 +376,7 @@ services:
   # =====
   gateway:
     image: flexksx/mafia_api_gateway:main
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       gateway-cache:
@@ -406,6 +420,80 @@ services:
     networks:
       - mafia-network
 
+  # SERVICE DISCOVERY
+  # ================
+  service-discovery:
+    build:
+      context: ./mafia_service_discovery
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "${SERVICE_DISCOVERY_PORT:-3004}:3004"
+    environment:
+      SERVICE_DISCOVERY_PORT: 3004
+      SERVICE_DISCOVERY_HOST: 0.0.0.0
+      HEALTH_CHECK_INTERVAL_SECONDS: 30
+      HEALTH_CHECK_TIMEOUT_SECONDS: 5
+      CRITICAL_LOAD_THRESHOLD: 0.8
+      SERVICE_REGISTRATION_TTL_SECONDS: 300
+      SERVICE_HEARTBEAT_INTERVAL_SECONDS: 60
+      LOG_LEVEL: INFO
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET:-service-discovery-secret-change-me}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:3004/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - mafia-network
+
+  # MONITORING STACK
+  # ===============
+
+  # Prometheus - Metrics collection and storage
+  prometheus:
+    image: prom/prometheus:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=200h"
+      - "--web.enable-lifecycle"
+    networks:
+      - mafia-network
+
+  # Grafana - Visualization and dashboards
+  grafana:
+    image: grafana/grafana:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - mafia-network
+
 # =================================================================
 # NETWORKS AND VOLUMES
 # =================================================================
@@ -424,6 +512,10 @@ volumes:
   roleplay_service_data:
     driver: local
   gateway_cache_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:
