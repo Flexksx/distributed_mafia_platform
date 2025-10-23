@@ -163,6 +163,7 @@ services:
       POSTGRES_DB: ${USER_SERVICE_POSTGRES_DB}
       POSTGRES_PORT: ${USER_SERVICE_POSTGRES_PORT}
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+      LOG_LEVEL: info
     healthcheck:
       test:
         [
@@ -464,6 +465,7 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -480,7 +482,7 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "${GRAFANA_PORT:-3007}:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}

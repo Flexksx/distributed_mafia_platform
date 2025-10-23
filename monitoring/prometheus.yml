@@ -19,35 +19,55 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # Gateway Service (if it exposes metrics)
+  # Gateway Service (single instance)
   - job_name: 'gateway'
     static_configs:
       - targets: ['gateway:8080']
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # User Management Service (if it exposes metrics)
+  # User Management Service - DNS service discovery for multiple replicas
   - job_name: 'user-management'
-    static_configs:
-      - targets: ['user-management-service:3000']
+    dns_sd_configs:
+      - names: ['user-management-service']
+        type: 'A'
+        port: 3000
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: instance
+        regex: 'user-management-service'
+        replacement: 'user-management-service'
+      - source_labels: [__address__]
+        target_label: service_name
+        replacement: 'user-management-service'
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # Game Service (if it exposes metrics)
+  # Game Service - DNS service discovery for multiple replicas
   - job_name: 'game-service'
-    static_configs:
-      - targets: ['game-service:3001']
+    dns_sd_configs:
+      - names: ['game-service']
+        type: 'A'
+        port: 3001
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: instance
+        regex: 'game-service'
+        replacement: 'game-service'
+      - source_labels: [__address__]
+        target_label: service_name
+        replacement: 'game-service'
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # Task Service (if it exposes metrics)
+  # Task Service (single instance)
   - job_name: 'task-service'
     static_configs:
       - targets: ['task-service:3002']
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # Voting Service (if it exposes metrics)
+  # Voting Service (single instance)
   - job_name: 'voting-service'
     static_configs:
       - targets: ['voting-service:3003']
