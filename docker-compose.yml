@@ -423,9 +423,7 @@ services:
   # SERVICE DISCOVERY
   # ================
   service-discovery:
-    build:
-      context: ./mafia_service_discovery
-      dockerfile: Dockerfile
+    image: flexksx/mafia_service_discovery:latest
     platform: linux/amd64
     restart: unless-stopped
     ports:
