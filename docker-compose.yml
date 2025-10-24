@@ -3,6 +3,44 @@ services:
   # DATABASE SERVICES
   # =================================================================
 
+
+  # PostgreSQL for Character Service
+  character-service-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CHARACTER_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${CHARACTER_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${CHARACTER_SERVICE_POSTGRES_DB}
+    volumes:
+      - character_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
+      # PostgreSQL for Town Service
+  town-service-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TOWN_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TOWN_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TOWN_SERVICE_POSTGRES_DB}
+    volumes:
+      - town_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
+
   # PostgreSQL for User Management Service
   user-management-db:
     image: postgres:16
@@ -141,6 +179,68 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - mafia-network
+
+  # Character Service (Spring Boot + Java)
+  character-service:
+    image: liviutofan/character-service:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      character-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://character-service-db:${CHARACTER_SERVICE_POSTGRES_PORT}/${CHARACTER_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${CHARACTER_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${CHARACTER_SERVICE_POSTGRES_PASSWORD}
+      SERVER_PORT: ${CHARACTER_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+    ports:
+      - "${CHARACTER_SERVICE_PORT}:${CHARACTER_SERVICE_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - mafia-network
+
+# Town Service (Spring Boot + Java)
+  town-service:
+    image: liviutofan/town-service:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      town-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://town-service-db:${TOWN_SERVICE_POSTGRES_PORT}/${TOWN_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${TOWN_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${TOWN_SERVICE_POSTGRES_PASSWORD}
+      SERVER_PORT: ${TOWN_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+    ports:
+      - "${TOWN_SERVICE_PORT}:${TOWN_SERVICE_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
     networks:
       - mafia-network
 
@@ -294,9 +394,9 @@ services:
     user: root
     command: sh -c "npx prisma db push --skip-generate --force-reset --accept-data-loss && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
-  # Shop Service (Spring Boot + Java)
-  shop-service:
-    image: cebanvasile1/shop-service:latest
+    # Shop Service (Spring Boot + Java) - Instance 1
+  shop-service-1:
+    image: cebanvasile1/shop-service:2.0.3
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
@@ -309,23 +409,54 @@ services:
       task-service:
         condition: service_healthy
     environment:
-      # Spring Boot database configuration
       SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
-      # Service URLs for inter-service communication
       CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
       ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
       TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+      INSTANCE_ID: shop-service-1
+      SERVER_PORT: 8081
     ports:
-      - "${SHOP_SERVICE_PORT}:${SHOP_SERVICE_PORT}"
+      - "8081:8081"
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://localhost:$$SHOP_SERVICE_PORT/actuator/health >/dev/null 2>&1 || exit 1",
-        ]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - mafia-network
+
+  # Shop Service (Spring Boot + Java) - Instance 2
+  shop-service-2:
+    image: cebanvasile1/shop-service:2.0.3
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      shop-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
+      CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
+      ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
+      TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+      INSTANCE_ID: shop-service-2
+      SERVER_PORT: 8081
+    ports:
+      - "8082:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -515,6 +646,10 @@ volumes:
   shop_service_data:
     driver: local
   roleplay_service_data:
+    driver: local
+  character_service_data:
+    driver: local
+  town_service_data:
     driver: local
   gateway_cache_data:
     driver: local
