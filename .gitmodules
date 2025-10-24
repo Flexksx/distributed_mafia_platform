@@ -22,7 +22,6 @@
 [submodule "rumors-service"]
 	path = rumors-service
 	url = https://github.com/VladNoMore/Rumors-Service
-
 [submodule "voting-service"]
 	path = voting-service
 	url = git@github.com:XRRRA/voting-service.git
@@ -38,3 +37,6 @@
 [submodule "mafia_service_discovery"]
 	path = mafia_service_discovery
 	url = git@github.com:Flexksx/mafia_service_discovery.git
+[submodule "character-service"]
+	path = character-service
+	url = https://github.com/LiviuTofan/character-service.git

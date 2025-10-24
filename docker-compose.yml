@@ -3,6 +3,44 @@ services:
   # DATABASE SERVICES
   # =================================================================
 
+
+  # PostgreSQL for Character Service
+  character-service-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CHARACTER_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${CHARACTER_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${CHARACTER_SERVICE_POSTGRES_DB}
+    volumes:
+      - character_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
+      # PostgreSQL for Town Service
+  town-service-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TOWN_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TOWN_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${TOWN_SERVICE_POSTGRES_DB}
+    volumes:
+      - town_service_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mafia-network
+
+
   # PostgreSQL for User Management Service
   user-management-db:
     image: postgres:16
@@ -141,6 +179,68 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - mafia-network
+
+  # Character Service (Spring Boot + Java)
+  character-service:
+    image: liviutofan/character-service:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      character-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://character-service-db:${CHARACTER_SERVICE_POSTGRES_PORT}/${CHARACTER_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${CHARACTER_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${CHARACTER_SERVICE_POSTGRES_PASSWORD}
+      SERVER_PORT: ${CHARACTER_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+    ports:
+      - "${CHARACTER_SERVICE_PORT}:${CHARACTER_SERVICE_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - mafia-network
+
+# Town Service (Spring Boot + Java)
+  town-service:
+    image: liviutofan/town-service:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      town-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://town-service-db:${TOWN_SERVICE_POSTGRES_PORT}/${TOWN_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${TOWN_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${TOWN_SERVICE_POSTGRES_PASSWORD}
+      SERVER_PORT: ${TOWN_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+    ports:
+      - "${TOWN_SERVICE_PORT}:${TOWN_SERVICE_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
     networks:
       - mafia-network
 
@@ -541,6 +641,10 @@ volumes:
   shop_service_data:
     driver: local
   roleplay_service_data:
+    driver: local
+  character_service_data:
+    driver: local
+  town_service_data:
     driver: local
   gateway_cache_data:
     driver: local
