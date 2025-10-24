@@ -17,14 +17,30 @@ scrape_configs:
     static_configs:
       - targets: ['service-discovery:3004']
     metrics_path: '/metrics'
-    scrape_interval: 30s
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+      - source_labels: [__address__]
+        target_label: service_name
+        replacement: 'service-discovery'
 
   # Gateway Service (single instance)
   - job_name: 'gateway'
     static_configs:
       - targets: ['gateway:8080']
     metrics_path: '/metrics'
-    scrape_interval: 30s
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+      - source_labels: [__address__]
+        target_label: service_name
+        replacement: 'gateway'
 
   # User Management Service - DNS service discovery for multiple replicas
   - job_name: 'user-management'
@@ -34,14 +50,18 @@ scrape_configs:
         port: 3000
     relabel_configs:
       - source_labels: [__meta_dns_name]
-        target_label: instance
-        regex: 'user-management-service'
-        replacement: 'user-management-service'
-      - source_labels: [__address__]
         target_label: service_name
         replacement: 'user-management-service'
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+      - source_labels: [__meta_dns_srv_record_target]
+        target_label: instance_id
+        regex: 'user-management-service-([^.]+)'
+        replacement: '${1}'
     metrics_path: '/metrics'
-    scrape_interval: 30s
+    scrape_interval: 15s
 
   # Game Service - DNS service discovery for multiple replicas
   - job_name: 'game-service'
@@ -74,9 +94,3 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # Service Discovery Health Checks
-  - job_name: 'service-discovery-health'
-    static_configs:
-      - targets: ['service-discovery:3004']
-    metrics_path: '/health'
-    scrape_interval: 30s

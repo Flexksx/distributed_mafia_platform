@@ -248,7 +248,7 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     deploy:
-      replicas: 2
+      replicas: 3
     depends_on:
       user-management-db:
         condition: service_healthy
@@ -283,7 +283,7 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     deploy:
-      replicas: 2
+      replicas: 3
     depends_on:
       game-service-db:
         condition: service_healthy
