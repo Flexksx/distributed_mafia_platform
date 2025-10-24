@@ -289,9 +289,9 @@ services:
     user: root
     command: sh -c "npx prisma db push --skip-generate --force-reset --accept-data-loss && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
-  # Shop Service (Spring Boot + Java)
-  shop-service:
-    image: cebanvasile1/shop-service:latest
+    # Shop Service (Spring Boot + Java) - Instance 1
+  shop-service-1:
+    image: cebanvasile1/shop-service:2.0.3
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
@@ -304,23 +304,54 @@ services:
       task-service:
         condition: service_healthy
     environment:
-      # Spring Boot database configuration
       SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
-      # Service URLs for inter-service communication
       CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
       ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
       TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+      INSTANCE_ID: shop-service-1
+      SERVER_PORT: 8081
     ports:
-      - "${SHOP_SERVICE_PORT}:${SHOP_SERVICE_PORT}"
+      - "8081:8081"
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://localhost:$$SHOP_SERVICE_PORT/actuator/health >/dev/null 2>&1 || exit 1",
-        ]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - mafia-network
+
+  # Shop Service (Spring Boot + Java) - Instance 2
+  shop-service-2:
+    image: cebanvasile1/shop-service:2.0.3
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      shop-service-db:
+        condition: service_healthy
+      user-management-service:
+        condition: service_healthy
+      game-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
+      CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
+      ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
+      TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
+      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+      INSTANCE_ID: shop-service-2
+      SERVER_PORT: 8081
+    ports:
+      - "8082:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
