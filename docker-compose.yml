@@ -318,6 +318,8 @@ services:
     image: rayderr/mafia_liviu_task_service:latest
     platform: linux/amd64
     restart: unless-stopped
+    deploy:
+      replicas: 2
     depends_on:
       task-service-db:
         condition: service_healthy
@@ -325,6 +327,8 @@ services:
         condition: service_healthy
       user-management-service:
         condition: service_healthy
+      service-discovery:
+        condition: service_started
     environment:
       PORT: ${TASK_SERVICE_PORT}
       NODE_ENV: production
@@ -332,8 +336,9 @@ services:
       APP_PORT: ${TASK_SERVICE_PORT}
       JWT_SECRET: production-jwt-secret-change-me
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
-    ports:
-      - "${TASK_SERVICE_PORT}:${TASK_SERVICE_PORT}"
+      SERVICE_DISCOVERY_URL: http://service-discovery:${SERVICE_DISCOVERY_PORT}
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
+      SERVICE_HOST: task-service
     healthcheck:
       test:
         [
@@ -355,6 +360,8 @@ services:
     image: rayderr/mafia_liviu_voting_service:latest
     platform: linux/amd64
     restart: unless-stopped
+    deploy:
+      replicas: 2
     depends_on:
       voting-service-db:
         condition: service_healthy
@@ -364,6 +371,8 @@ services:
         condition: service_healthy
       task-service:
         condition: service_healthy
+      service-discovery:
+        condition: service_started
     environment:
       PORT: ${VOTING_SERVICE_PORT}
       NODE_ENV: production
@@ -372,8 +381,9 @@ services:
       JWT_SECRET: production-jwt-secret-change-me
       TIE_BREAK_METHOD: RANDOM
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
-    ports:
-      - "${VOTING_SERVICE_PORT}:${VOTING_SERVICE_PORT}"
+      SERVICE_DISCOVERY_URL: http://service-discovery:${SERVICE_DISCOVERY_PORT}
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
+      SERVICE_HOST: voting-service
     healthcheck:
       test:
         [
