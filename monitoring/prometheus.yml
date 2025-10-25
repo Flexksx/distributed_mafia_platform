@@ -84,3 +84,44 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 15s
 
+  # Shop Service - DNS service discovery for multiple replicas
+  - job_name: 'shop-service'
+    dns_sd_configs:
+      - names: ['shop-service']
+        type: 'A'
+        port: 8081
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: service_name
+        replacement: 'shop-service'
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+      - source_labels: [__meta_dns_srv_record_target]
+        target_label: instance_id
+        regex: 'shop-service-([^.]+)'
+        replacement: '${1}'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+
+  # Roleplay Service - DNS service discovery for multiple replicas
+  - job_name: 'roleplay-service'
+    dns_sd_configs:
+      - names: ['roleplay-service']
+        type: 'A'
+        port: 8087
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: service_name
+        replacement: 'roleplay-service'
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+      - source_labels: [__meta_dns_srv_record_target]
+        target_label: instance_id
+        regex: 'roleplay-service-([^.]+)'
+        replacement: '${1}'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s

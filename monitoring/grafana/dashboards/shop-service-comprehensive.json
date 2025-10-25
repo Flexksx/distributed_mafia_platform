@@ -1,0 +1,636 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Shop Service - Comprehensive Monitoring",
+    "tags": [
+      "mafia",
+      "shop-service",
+      "comprehensive"
+    ],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Status Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"shop-service\"}",
+            "legendFormat": "Service Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Service Discovery Registration",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "service_discovery_registration_status{job=\"shop-service\"}",
+            "legendFormat": "{{instance_id}} - Registered"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Service Health Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "service_health_status{job=\"shop-service\"}",
+            "legendFormat": "{{instance_id}} - Healthy"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "Service Load Percentage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "service_load_percentage{job=\"shop-service\"}",
+            "legendFormat": "{{instance_id}} - Load %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.7
+                },
+                {
+                  "color": "red",
+                  "value": 0.9
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        }
+      },
+      {
+        "id": 5,
+        "title": "HTTP Request Rate by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"shop-service\"}[5m])",
+            "legendFormat": "{{instance}} - {{method}} {{route}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 6,
+        "title": "HTTP Request Duration by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"shop-service\"}[5m]))",
+            "legendFormat": "{{instance}} - 95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"shop-service\"}[5m]))",
+            "legendFormat": "{{instance}} - 50th percentile"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 7,
+        "title": "HTTP Request Errors by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(http_request_errors_total{job=\"shop-service\"}[5m])",
+            "legendFormat": "{{instance}} - {{method}} {{route}} {{error_type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 8,
+        "title": "Database Operations by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(database_operations_total{job=\"shop-service\"}[5m])",
+            "legendFormat": "{{instance}} - {{operation}} {{table}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 9,
+        "title": "Database Operation Duration by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(database_operation_duration_seconds_bucket{job=\"shop-service\"}[5m]))",
+            "legendFormat": "{{instance}} - 95th percentile"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 10,
+        "title": "Active Connections by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "active_connections{job=\"shop-service\"}",
+            "legendFormat": "{{instance}} - Active Connections"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        }
+      },
+      {
+        "id": 11,
+        "title": "Service Uptime by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "service_uptime_seconds{job=\"shop-service\"}",
+            "legendFormat": "{{instance}} - Uptime"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        }
+      },
+      {
+        "id": 12,
+        "title": "Memory Usage by Instance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "service_memory_usage_bytes{job=\"shop-service\"}",
+            "legendFormat": "{{instance}} - {{memory_type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        }
+      },
+      {
+        "id": 13,
+        "title": "Service Discovery Heartbeats",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(service_discovery_heartbeat_total{job=\"shop-service\"}[5m])",
+            "legendFormat": "{{instance_id}} - {{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 40
+        }
+      },
+      {
+        "id": 14,
+        "title": "Service Discovery Heartbeat Duration",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(service_discovery_heartbeat_duration_seconds_bucket{job=\"shop-service\"}[5m]))",
+            "legendFormat": "{{instance_id}} - 95th percentile"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 40
+        }
+      },
+      {
+        "id": 15,
+        "title": "Service Discovery Errors",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(service_discovery_errors_total{job=\"shop-service\"}[5m])",
+            "legendFormat": "{{instance_id}} - {{error_type}} {{operation}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 48
+        }
+      },
+      {
+        "id": 16,
+        "title": "Service Discovery Registration Duration",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(service_discovery_registration_duration_seconds_bucket{job=\"shop-service\"}[5m]))",
+            "legendFormat": "{{instance_id}} - 95th percentile"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 48
+        }
+      },
+      {
+        "id": 17,
+        "title": "Request Distribution by Status Code",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=\"shop-service\"}[5m])) by (status_code)",
+            "legendFormat": "{{status_code}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 56
+        }
+      },
+      {
+        "id": 18,
+        "title": "Request Distribution by HTTP Method",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{job=\"shop-service\"}[5m])) by (method)",
+            "legendFormat": "{{method}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 56
+        }
+      },
+      {
+        "id": 19,
+        "title": "Top Routes by Request Volume",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, sum(rate(http_requests_total{job=\"shop-service\"}[5m])) by (route, instance))",
+            "legendFormat": "{{route}} ({{instance}})"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 64
+        }
+      },
+      {
+        "id": 20,
+        "title": "Database Operations by Table",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "sum(rate(database_operations_total{job=\"shop-service\"}[5m])) by (table, operation)",
+            "legendFormat": "{{table}} - {{operation}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 64
+        }
+      },
+      {
+        "id": 21,
+        "title": "Load Distribution Across Instances",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "service_load_percentage{job=\"shop-service\"}",
+            "legendFormat": "{{instance_id}} - Load %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 72
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(up{job=\"shop-service\"}, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        },
+        {
+          "name": "instance_id",
+          "type": "query",
+          "query": "label_values(service_discovery_registration_status{job=\"shop-service\"}, instance_id)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        },
+        {
+          "name": "route",
+          "type": "query",
+          "query": "label_values(http_requests_total{job=\"shop-service\"}, route)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        },
+        {
+          "name": "method",
+          "type": "query",
+          "query": "label_values(http_requests_total{job=\"shop-service\"}, method)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    },
+    "uid": "shop-service-comprehensive"
+  }
+}
