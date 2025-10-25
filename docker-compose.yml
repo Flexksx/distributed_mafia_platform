@@ -403,87 +403,58 @@ services:
     command: sh -c "npx prisma db push --skip-generate --force-reset --accept-data-loss && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
     # Shop Service (Spring Boot + Java) - Instance 1
-  shop-service-1:
-    image: cebanvasile1/shop-service:2.0.3
-    platform: linux/amd64
+  shop-service:
+    image: cebanvasile1/shop-service:2.0.6
     restart: unless-stopped
-    depends_on:
-      shop-service-db:
-        condition: service_healthy
-      user-management-service:
-        condition: service_healthy
-      game-service:
-        condition: service_healthy
-      task-service:
-        condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
-      SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
-      SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
-      CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
-      ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
-      TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
-      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
-      INSTANCE_ID: shop-service-1
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/shop_service_db
+      SPRING_DATASOURCE_USERNAME: shop_user
+      SPRING_DATASOURCE_PASSWORD: shop_password
       SERVER_PORT: 8081
-    ports:
-      - "8081:8081"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 45s
+      SERVICE_DISCOVERY_ENABLED: "true"
+      SERVICE_DISCOVERY_URL: http://service-discovery:3004
+      SERVICE_DISCOVERY_SECRET: service-discovery-secret-change-me
     networks:
       - mafia-network
+    depends_on:
+      - postgres
+      - service-discovery
+    deploy:
+      replicas: 2
 
-  # Roleplay Service (Spring Boot + Java)
   roleplay-service:
     image: cebanvasile1/roleplay-service:latest
-    platform: linux/amd64
     restart: unless-stopped
     depends_on:
-      roleplay-service-db:
+      roleplay-postgres:
         condition: service_healthy
-      user-management-service:
-        condition: service_healthy
-      game-service:
+      service-discovery:
         condition: service_healthy
     environment:
-      # Database configuration
-      DB_HOST: roleplay-service-db
-      DB_PORT: ${ROLEPLAY_SERVICE_POSTGRES_PORT}
-      DB_NAME: ${ROLEPLAY_SERVICE_POSTGRES_DB}
-      DB_USERNAME: ${ROLEPLAY_SERVICE_POSTGRES_USER}
-      DB_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
-      # Application configuration
-      SERVER_PORT: ${ROLEPLAY_SERVICE_PORT}
-      JPA_DDL_AUTO: update
-      JPA_SHOW_SQL: true
-      LOG_LEVEL_WEB: DEBUG
-      LOG_LEVEL_APP: DEBUG
-      # Service URLs for inter-service communication
-      USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
-      GAME_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
-      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
-    ports:
-      - "${ROLEPLAY_SERVICE_PORT}:${ROLEPLAY_SERVICE_PORT}"
+      DB_HOST: roleplay-postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-mydatabase}
+      DB_USERNAME: ${DB_USERNAME:-myuser}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      SERVER_PORT: 8082
+      SERVICE_DISCOVERY_URL: http://service-discovery:3004
+      SERVICE_DISCOVERY_ENABLED: ${SERVICE_DISCOVERY_ENABLED:-true}
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET:-default-secret-key}
+      SERVICE_HEALTH_ENDPOINT: /health
+      # JPA_DDL_AUTO: update
+      # JPA_SHOW_SQL: "true"
+      # LOG_LEVEL_WEB: DEBUG
+      # LOG_LEVEL_APP: DEBUG
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
-        ]
-      interval: 15s
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 45s
+      start_period: 10s
     networks:
       - mafia-network
+    deploy:
+      replicas: 2
 
   # =====
   # GATEWAY
