@@ -74,6 +74,40 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 30s
 
+  # Town Service - DNS service discovery for multiple replicas (3 instances)
+  - job_name: 'town-service'
+    dns_sd_configs:
+      - names: ['town-service']
+        type: 'A'
+        port: 8081
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: instance
+        regex: 'town-service'
+        replacement: 'town-service'
+      - source_labels: [__address__]
+        target_label: service_name
+        replacement: 'town-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+
+  # Character Service - DNS service discovery for multiple replicas (3 instances)
+  - job_name: 'character-service'
+    dns_sd_configs:
+      - names: ['character-service']
+        type: 'A'
+        port: 8080
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: instance
+        regex: 'character-service'
+        replacement: 'character-service'
+      - source_labels: [__address__]
+        target_label: service_name
+        replacement: 'character-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+
   # Service Discovery Health Checks
   - job_name: 'service-discovery-health'
     static_configs:
