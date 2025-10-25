@@ -403,45 +403,39 @@ services:
     command: sh -c "npx prisma db push --skip-generate --force-reset --accept-data-loss && su -s /bin/sh nodejs -c 'node dist/src/server/index.js'"
 
     # Shop Service (Spring Boot + Java) - Instance 1
-  shop-service-1:
-    image: cebanvasile1/shop-service:2.0.3
+  shop-service:
+    image: cebanvasile1/shop-service:2.0.6
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
       shop-service-db:
         condition: service_healthy
-      user-management-service:
-        condition: service_healthy
-      game-service:
-        condition: service_healthy
-      task-service:
-        condition: service_healthy
+      service-discovery:
+        condition: service_started
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://shop-service-db:${SHOP_SERVICE_POSTGRES_PORT}/${SHOP_SERVICE_POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${SHOP_SERVICE_POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
-      CHARACTER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
-      ROLEPLAY_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
-      TASK_SERVICE_URL: http://task-service:${TASK_SERVICE_PORT}
-      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
-      INSTANCE_ID: shop-service-1
-      SERVER_PORT: 8081
-    ports:
-      - "8081:8081"
+      SERVER_PORT: ${SHOP_SERVICE_PORT}
+      SERVICE_DISCOVERY_ENABLED: "true"
+      SERVICE_DISCOVERY_URL: http://service-discovery:${SERVICE_DISCOVERY_PORT}
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
+      SERVICE_HEALTH_ENDPOINT: /health
+    networks:
+      - mafia-network
+    deploy:
+      replicas: 2
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:8081/actuator/health >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$SERVER_PORT/health >/dev/null 2>&1 || exit 1",
         ]
-      interval: 15s
-      timeout: 5s
+      interval: 20s
+      timeout: 10s
       retries: 3
-      start_period: 45s
-    networks:
-      - mafia-network
+      start_period: 30s
 
-  # Roleplay Service (Spring Boot + Java)
   roleplay-service:
     image: cebanvasile1/roleplay-service:latest
     platform: linux/amd64
@@ -449,41 +443,33 @@ services:
     depends_on:
       roleplay-service-db:
         condition: service_healthy
-      user-management-service:
-        condition: service_healthy
-      game-service:
-        condition: service_healthy
+      service-discovery:
+        condition: service_started
     environment:
-      # Database configuration
       DB_HOST: roleplay-service-db
       DB_PORT: ${ROLEPLAY_SERVICE_POSTGRES_PORT}
       DB_NAME: ${ROLEPLAY_SERVICE_POSTGRES_DB}
       DB_USERNAME: ${ROLEPLAY_SERVICE_POSTGRES_USER}
       DB_PASSWORD: ${ROLEPLAY_SERVICE_POSTGRES_PASSWORD}
-      # Application configuration
       SERVER_PORT: ${ROLEPLAY_SERVICE_PORT}
-      JPA_DDL_AUTO: update
-      JPA_SHOW_SQL: true
-      LOG_LEVEL_WEB: DEBUG
-      LOG_LEVEL_APP: DEBUG
-      # Service URLs for inter-service communication
-      USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
-      GAME_SERVICE_URL: http://game-service:${GAME_SERVICE_PORT}
-      GATEWAY_URL: http://gateway:${GATEWAY_PORT}
-    ports:
-      - "${ROLEPLAY_SERVICE_PORT}:${ROLEPLAY_SERVICE_PORT}"
+      SERVICE_DISCOVERY_URL: http://service-discovery:${SERVICE_DISCOVERY_PORT}
+      SERVICE_DISCOVERY_ENABLED: ${SERVICE_DISCOVERY_ENABLED:-true}
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
+      SERVICE_HEALTH_ENDPOINT: /health
+    networks:
+      - mafia-network
+    deploy:
+      replicas: 2
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:$$SERVER_PORT/actuator/health >/dev/null 2>&1 || exit 1",
+          "curl -f http://localhost:$$SERVER_PORT/health || exit 1",
         ]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 45s
-    networks:
-      - mafia-network
+      start_period: 30s
 
   # =====
   # GATEWAY
