@@ -248,7 +248,7 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     deploy:
-      replicas: 3
+      replicas: 2
     depends_on:
       user-management-db:
         condition: service_healthy
@@ -283,7 +283,7 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     deploy:
-      replicas: 3
+      replicas: 2
     depends_on:
       game-service-db:
         condition: service_healthy
@@ -300,11 +300,14 @@ services:
       POSTGRES_PORT: ${GAME_SERVICE_POSTGRES_PORT}
       CROSS_SERVICE_API_KEY: ${GATEWAY_SERVICE_TO_SERVICE_SECRET}
       GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+      LOG_LEVEL: info
+      SERVICE_DISCOVERY_URL: http://service-discovery:3004
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:$$PORT/v1/lobby >/dev/null 2>&1 || exit 1",
+          "wget -qO- http://localhost:$$PORT/health >/dev/null 2>&1 || exit 1",
         ]
       interval: 15s
       timeout: 5s
@@ -482,14 +485,7 @@ services:
     depends_on:
       gateway-cache:
         condition: service_healthy
-      user-management-service:
-        condition: service_healthy
-      game-service:
-        condition: service_healthy
-      task-service:
-        condition: service_healthy
-      voting-service:
-        condition: service_healthy
+
     ports:
       - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     environment:

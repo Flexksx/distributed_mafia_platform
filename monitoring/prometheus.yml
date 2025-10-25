@@ -71,26 +71,16 @@ scrape_configs:
         port: 3001
     relabel_configs:
       - source_labels: [__meta_dns_name]
-        target_label: instance
-        regex: 'game-service'
-        replacement: 'game-service'
-      - source_labels: [__address__]
         target_label: service_name
         replacement: 'game-service'
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+      - source_labels: [__meta_dns_srv_record_target]
+        target_label: instance_id
+        regex: 'game-service-([^.]+)'
+        replacement: '${1}'
     metrics_path: '/metrics'
-    scrape_interval: 30s
-
-  # Task Service (single instance)
-  - job_name: 'task-service'
-    static_configs:
-      - targets: ['task-service:3002']
-    metrics_path: '/metrics'
-    scrape_interval: 30s
-
-  # Voting Service (single instance)
-  - job_name: 'voting-service'
-    static_configs:
-      - targets: ['voting-service:3003']
-    metrics_path: '/metrics'
-    scrape_interval: 30s
+    scrape_interval: 15s
 
