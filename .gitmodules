@@ -40,3 +40,6 @@
 [submodule "character-service"]
 	path = character-service
 	url = https://github.com/LiviuTofan/character-service.git
+[submodule "message_broker"]
+	path = message_broker
+	url = https://github.com/ceban-vasile/mafia_message_broker.git
