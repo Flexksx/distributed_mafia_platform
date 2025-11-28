@@ -254,6 +254,7 @@ services:
         condition: service_healthy
     environment:
       PORT: ${USER_SERVICE_PORT}
+      GRPC_PORT: 50051
       NODE_ENV: production
       DATABASE_URL: postgresql://${USER_SERVICE_POSTGRES_USER}:${USER_SERVICE_POSTGRES_PASSWORD}@user-management-db:${USER_SERVICE_POSTGRES_PORT}/${USER_SERVICE_POSTGRES_DB}?schema=public
       POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
@@ -291,6 +292,7 @@ services:
         condition: service_healthy
     environment:
       PORT: ${GAME_SERVICE_PORT}
+      GRPC_PORT: 50051
       NODE_ENV: production
       USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
       DATABASE_URL: postgresql://${GAME_SERVICE_POSTGRES_USER}:${GAME_SERVICE_POSTGRES_PASSWORD}@game-service-db:${GAME_SERVICE_POSTGRES_PORT}/${GAME_SERVICE_POSTGRES_DB}?schema=public
@@ -462,10 +464,7 @@ services:
       replicas: 2
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "curl -f http://localhost:$$SERVER_PORT/health || exit 1",
-        ]
+        ["CMD-SHELL", "curl -f http://localhost:$$SERVER_PORT/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -481,11 +480,14 @@ services:
     depends_on:
       gateway-cache:
         condition: service_healthy
+      message-broker:
+        condition: service_healthy
 
     ports:
       - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     environment:
       PORT: ${GATEWAY_PORT}
+      MESSAGE_BROKER_URL: "http://message-broker:${MESSAGE_BROKER_PORT}"
       USER_SERVICE_URL: "http://user-management-service:${USER_SERVICE_PORT}"
       GAME_SERVICE_URL: "http://game-service:${GAME_SERVICE_PORT}"
       TASK_SERVICE_URL: "http://task-service:${TASK_SERVICE_PORT}"
@@ -541,6 +543,88 @@ services:
         [
           "CMD-SHELL",
           "wget -qO- http://localhost:3004/health >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - mafia-network
+
+  # MESSAGE BROKER
+  # ==============
+  message-broker:
+    image: cebanvasile/mafia-message-broker:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      gateway-cache:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+    ports:
+      - "8002:8002"
+    environment:
+      # Broker Configuration
+      BROKER_HOST: 0.0.0.0
+      BROKER_PORT: 8002
+      BROKER_NAME: message-broker
+
+      # Redis Configuration (reuse gateway cache)
+      REDIS_HOST: gateway-cache
+      REDIS_PORT: 6379
+      REDIS_DB: 1
+      REDIS_PASSWORD: ""
+
+      # Service Discovery
+      SERVICE_DISCOVERY_URL: http://service-discovery:3004
+      SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
+
+      # Message Configuration
+      MAX_MESSAGE_SIZE: 1048576
+      MESSAGE_TTL: 3600
+      MAX_QUEUE_SIZE: 10000
+      MAX_MESSAGE_RETRIES: 5
+      RETRY_DELAY_SECONDS: 5
+      DLQ_ENABLED: "true"
+
+      # Load Balancing
+      LOAD_BALANCING_STRATEGY: least_load
+      HEALTH_CHECK_INTERVAL_SECONDS: 30
+      HEALTH_CHECK_TIMEOUT_SECONDS: 5
+
+      # Circuit Breaker
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: 5
+      CIRCUIT_BREAKER_SUCCESS_THRESHOLD: 2
+      CIRCUIT_BREAKER_TIMEOUT_SECONDS: 60
+      CIRCUIT_BREAKER_HALF_OPEN_MAX_REQUESTS: 3
+
+      # Grade 5: Failover
+      FAILOVER_ENABLED: "true"
+      FAILOVER_FAILURE_THRESHOLD: 3
+      FAILOVER_RESET_TIMEOUT: 10
+      FAILOVER_MAX_RETRY_ATTEMPTS: 3
+
+      # Grade 6 & 7: Durable Queues
+      DATABASE_URL: sqlite:///./message_broker.db
+      RETRY_BACKOFF_MULTIPLIER: 2.0
+
+      # Grade 8: Two-Phase Commit
+      TRANSACTION_TIMEOUT: 30
+      TRANSACTION_MAX_PARTICIPANTS: 10
+
+      # Thread Pool
+      THREAD_POOL_MAX_WORKERS: 50
+      REQUEST_TIMEOUT: 30
+
+      # Monitoring
+      METRICS_ENABLED: "true"
+      LOG_LEVEL: INFO
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8002/health >/dev/null 2>&1 || exit 1",
         ]
       interval: 15s
       timeout: 5s
