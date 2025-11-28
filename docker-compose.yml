@@ -254,7 +254,7 @@ services:
         condition: service_healthy
     environment:
       PORT: ${USER_SERVICE_PORT}
-      GRPC_PORT: 50051
+      GRPC_PORT: ${USER_SERVICE_GRPC_PORT}
       NODE_ENV: production
       DATABASE_URL: postgresql://${USER_SERVICE_POSTGRES_USER}:${USER_SERVICE_POSTGRES_PASSWORD}@user-management-db:${USER_SERVICE_POSTGRES_PORT}/${USER_SERVICE_POSTGRES_DB}?schema=public
       POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
@@ -292,7 +292,7 @@ services:
         condition: service_healthy
     environment:
       PORT: ${GAME_SERVICE_PORT}
-      GRPC_PORT: 50051
+      GRPC_PORT: ${GAME_SERVICE_GRPC_PORT}
       NODE_ENV: production
       USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
       DATABASE_URL: postgresql://${GAME_SERVICE_POSTGRES_USER}:${GAME_SERVICE_POSTGRES_PASSWORD}@game-service-db:${GAME_SERVICE_POSTGRES_PORT}/${GAME_SERVICE_POSTGRES_DB}?schema=public
