@@ -265,6 +265,7 @@ services:
       LOG_LEVEL: info
       SERVICE_DISCOVERY_URL: http://service-discovery:3004
       SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
+      MESSAGE_BROKER_URL: "http://message-broker:${MESSAGE_BROKER_PORT}"
     healthcheck:
       test:
         [
@@ -305,6 +306,7 @@ services:
       LOG_LEVEL: info
       SERVICE_DISCOVERY_URL: http://service-discovery:3004
       SERVICE_DISCOVERY_SECRET: ${SERVICE_DISCOVERY_SECRET}
+      MESSAGE_BROKER_URL: http://message-broker:${MESSAGE_BROKER_PORT}
     healthcheck:
       test:
         [
@@ -554,7 +556,7 @@ services:
   # MESSAGE BROKER
   # ==============
   message-broker:
-    image: cebanvasile/mafia-message-broker:latest
+    build: ./message_broker # Build our modified version locally
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
@@ -624,7 +626,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost:8002/health >/dev/null 2>&1 || exit 1",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8002/health'')"',
         ]
       interval: 15s
       timeout: 5s
