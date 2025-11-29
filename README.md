@@ -1,21 +1,238 @@
 # distributed_applications_labs
 
-The Mafia Game Platform is designed as a microservices-based distributed application where each service owns its own data and responsibilities while collaborating via REST/JSON APIs (with optional WebSocket or broker-based eventing for real-time flows). 
+The Mafia Game Platform now runs as a service-discovered mesh behind a slim API Gateway and a Message Broker. The gateway only handles user authentication and edge caching; all service-to-service calls (commands, events, fan-out) now flow through the Message Broker, which owns load balancing, circuit breaking, durable queues, DLQ, and gRPC delivery. Each service is containerized, owns its database, and registers with Service Discovery so both the gateway and the broker can route requests to healthy instances. Redis backs the gateway cache; each service has its own Postgres instance (or Mongo for document-first services).
 
-At its core, the system provides a multiplayer social deduction game with persistent user accounts, lobbies, shops, role mechanics, rumors, chat, voting, and town exploration. Each service is deployed independently (containerized with Docker), uses its own PostgreSQL or MongoDB datastore, and is horizontally scalable. 
+Active services in the 2025 compose stack:
 
-* The **User Management Service** provides the single source of truth for player identity and in-game currency.
-* The **Game Service** orchestrates lobbies, player state, and day/night cycles.
-* The **Shop Service** handles item catalogs, purchases, and inventory.
-* The **Roleplay Service** governs role-specific actions and outcomes.
-* The **Rumors Service** creates a marketplace of information using flexible document storage.
-* The **Communication Service** enables real-time chat through REST/WebSockets and Redis pub/sub.
-* The **Task Service** assigns and tracks role-based tasks, rewarding players with currency.
-* The **Voting Service** manages evening exile votes with idempotency and tie-breaking logic.
-* The **Town Service** tracks player movements across locations.
-* Finally, the **Character Service** manages avatars and cosmetic customization.
+* **API Gateway** – Entry point for clients; enforces auth and caches responses in Redis. No business routes exposed for internal-only traffic.
+* **Message Broker** – HTTP ingress + gRPC delivery for service-to-service commands and events. Owns LB, circuit breaking, DLQ, and 2PC.
+* **Service Discovery** – Tracks service heartbeats, load, and health, and returns routable instances to the gateway.
+* **User Management Service** – Single source of truth for player identity and in‑game currency.
+* **Game Service** – Orchestrates lobbies, player state, and day/night cycles.
+* **Shop Service** – Item catalog, purchases, inventory, and protection effects.
+* **Roleplay Service** – Role definitions, assignments, actions, and announcements.
+* **Task Service** – Role-based tasks and rewards.
+* **Voting Service** – Evening exile votes with idempotency and tie-breaking logic.
+* **Character Service** – Avatars and cosmetics.
+* **Town Service** – Tracks player movement across locations.
+* **Monitoring Stack** – Prometheus + Grafana shipped alongside the compose file.
+* **Message Broker** – Redis-backed broker for pub/sub and request-reply (see `message_broker/`).
 
-Together, these services compose a cohesive ecosystem where independent scaling, fault isolation, and clear domain boundaries make the platform robust, extensible, and ready for experimentation with distributed systems concepts such as event-driven architecture, CQRS, and eventual consistency.
+Together, these services compose a cohesive ecosystem where independent scaling, fault isolation, and clear domain boundaries make the platform robust, extensible, and ready for experimentation with service discovery, event-driven flows, and eventual consistency.
+
+## Platform Architecture (May 2025)
+
+```mermaid
+flowchart LR
+    Clients -->|REST/JSON| Gateway
+    Gateway -->|auth + cache| RedisCache
+    Gateway -->|commands/events| MessageBroker
+    MessageBroker -->|gRPC| UserService
+    MessageBroker -->|gRPC| GameService
+    MessageBroker -->|gRPC| TaskService
+    MessageBroker -->|gRPC| VotingService
+    MessageBroker -->|gRPC| ShopService
+    MessageBroker -->|gRPC| RoleplayService
+    MessageBroker -->|gRPC| CharacterService
+    MessageBroker -->|gRPC| TownService
+    MessageBroker -->|topics| TopicQueues
+    Gateway -->|instance lookup| ServiceDiscovery
+    MessageBroker -->|instance lookup| ServiceDiscovery
+    ServiceDiscovery --> UserService
+    ServiceDiscovery --> GameService
+    ServiceDiscovery --> TaskService
+    ServiceDiscovery --> VotingService
+    ServiceDiscovery --> ShopService
+    ServiceDiscovery --> RoleplayService
+    ServiceDiscovery --> CharacterService
+    ServiceDiscovery --> TownService
+
+    subgraph Observability
+        Prometheus --> Grafana
+    end
+
+    subgraph Storage["Per-service storage"]
+        PG1[(Postgres: user)]
+        PG2[(Postgres: game)]
+        PG3[(Postgres: tasks)]
+        PG4[(Postgres: voting)]
+        PG5[(Postgres: shop)]
+        PG6[(Postgres: roleplay)]
+        PG7[(Postgres: character)]
+        PG8[(Postgres: town)]
+    end
+
+    UserService --> PG1
+    GameService --> PG2
+    TaskService --> PG3
+    VotingService --> PG4
+    ShopService --> PG5
+    RoleplayService --> PG6
+    CharacterService --> PG7
+    TownService --> PG8
+```
+
+### Service inventory (from `docker-compose.yml`)
+
+| Service | Port (env-driven) | Data store | Notes |
+| --- | --- | --- | --- |
+| API Gateway | `${GATEWAY_PORT}` | Redis edge cache `gateway-cache` | Auth + caching only; all S2S flows use Message Broker |
+| Message Broker | `3005/8002 (HTTP)` `50051 (gRPC)` | Redis + SQLite | LB, circuit breaker, DLQ, 2PC, topic + per-subscriber queues |
+| Service Discovery | `${SERVICE_DISCOVERY_PORT}` | In-memory registry | Health checks + load reporting |
+| User Management | `${USER_SERVICE_PORT}` | Postgres `user-management-db` | Identity + currency |
+| Game Service | `${GAME_SERVICE_PORT}` | Postgres `game-service-db` | Lobbies + cycles |
+| Task Service | `${TASK_SERVICE_PORT}` | Postgres `task-service-db` | Tasks + rewards |
+| Voting Service | `${VOTING_SERVICE_PORT}` | Postgres `voting-service-db` | Votes + tie-breakers |
+| Shop Service | `${SHOP_SERVICE_PORT}` | Postgres `shop-service-db` | Catalog + purchases + inventory |
+| Roleplay Service | `${ROLEPLAY_SERVICE_PORT}` | Postgres `roleplay-service-db` | Roles, actions, announcements |
+| Character Service | `${CHARACTER_SERVICE_PORT}` | Postgres `character-service-db` | Avatars/cosmetics |
+| Town Service | `${TOWN_SERVICE_PORT}` | Postgres `town-service-db` | Player locations |
+| Monitoring | `${PROMETHEUS_PORT}`, `${GRAFANA_PORT}` | Prometheus TSDB | Pre-provisioned dashboards |
+
+## Message Broker endpoints (HTTP ingress → gRPC delivery)
+
+All services register with Service Discovery and include their subscribed topics during registration. Gateway-to-service requests and service-to-service events now use these broker endpoints:
+
+**Command (Gateway/Service → Broker → gRPC target)**
+- `POST /broker/command/execute`
+  ```json
+  {
+    "destinationService": "shop-service",
+    "method": "GET",
+    "path": "/api/v1/items",
+    "payload": { "page": 0, "size": 10 },
+    "timeout_seconds": 30
+  }
+  ```
+  Response:
+  ```json
+  { "status_code": 200, "body": { "message": "{...service response...}", "success": true } }
+  ```
+
+**Event publish (Service → Broker → Topic queues)**
+- `POST /broker/event/publish`
+  ```json
+  {
+    "topic": "GAME_STARTED",
+    "payload": { "game_id": "123", "player_count": 8 },
+    "priority": "high"
+  }
+  ```
+  Response includes per-subscriber delivery results.
+
+**Poll events (Service pulls topic messages)**
+- `POST /broker/events/poll`
+  ```json
+  { "serviceName": "roleplay-service", "topics": ["GAME_STARTED"], "maxEvents": 10 }
+  ```
+
+**DLQ inspection**
+- `GET /broker/dlq?queue=queue:shop-service&limit=10`
+
+**Topics catalogue**
+- `GET /topics` → lists topics and subscribers registered in Service Discovery.
+
+**2PC (distributed transaction coordination)**
+- `POST /api/v1/2pc/transaction/start`
+  ```json
+  {
+    "transaction_id": "txn-uuid-12345",
+    "participants": ["order-service", "payment-service"],
+    "operation": "create_order",
+    "payload": { "orderId": "12345", "total": 130.00 }
+  }
+  ```
+- `GET /api/v1/2pc/transaction/{transaction_id}/status`
+
+**gRPC delivery contract (services implement)**
+```protobuf
+service ServiceHandler {
+  rpc DeliverMessage(MessageRequest) returns (MessageResponse);
+}
+```
+
+## New endpoints & DTOs (latest microservice updates)
+
+**Shop Service (`shop-service`, Spring Boot)**
+- `GET /api/v1/items/allAvailable` – list in-stock items.
+- `GET /api/v1/items/{itemId}` – item detail.
+- `POST /api/v1/items` – create item. DTO:
+  ```json
+  {
+    "name": "Vampire Ward",
+    "description": "Protects the user from vampire attacks for one night",
+    "price": 150.0,
+    "category": "PROTECTION",
+    "availableQuantity": 10,
+    "maxDailyQuantity": 3,
+    "replenishRate": 1,
+    "imageUrl": "https://example.com/vampire-ward.png",
+    "usageInstructions": "Use before nightfall. Effect lasts for one night cycle."
+  }
+  ```
+- `PUT /api/v1/items/{itemId}` – update item (same DTO as create).
+- `DELETE /api/v1/items/{itemId}` – remove item.
+- `POST /api/v1/purchases` – purchase items. DTO:
+  ```json
+  {
+    "userId": "user1",
+    "gameId": "game123",
+    "gameDay": 1,
+    "items": [{ "itemId": "5319e0d8-a51a-4da4-ae79-56a58ee4460d", "quantity": 1 }]
+  }
+  ```
+- `GET /api/v1/inventory/{userId}?gameId={gameId}` – view inventory for a game context.
+- `POST /api/v1/inventory/{userId}/use` – consume an item. DTO:
+  ```json
+  {
+    "gameId": "game123",
+    "gameDay": 1,
+    "gameCycle": "NIGHT",
+    "inventoryItemId": "b43b461f-5023-4972-babb-b28f7b813118",
+    "targetUserId": "string"
+  }
+  ```
+
+**Roleplay Service (`roleplay-service`, Spring Boot)**
+- `GET /api/v1/roles` – list available roles.
+- `POST /api/v1/roles` – create role. DTO:
+  ```json
+  { "name": "Mafia", "description": "Eliminate town", "alignment": "TOWN" }
+  ```
+- `GET /api/v1/player-roles/user/{userId}/game/{gameId}` – fetch user role in a game.
+- `POST /api/v1/player-roles` – assign role to player. DTO:
+  ```json
+  {
+    "userId": "player123533",
+    "gameId": "game456",
+    "roleId": "role-id",
+    "roleName": "Doctor",
+    "alignment": "TOWN",
+    "alive": true
+  }
+  ```
+- `POST /api/v1/actions` – submit role action. DTO:
+  ```json
+  {
+    "gameId": "game456",
+    "userId": "player1233",
+    "roleName": "Doctor",
+    "actionType": "HEAL",
+    "targets": ["targetPlayer789"],
+    "gamePhase": "NIGHT"
+  }
+  ```
+- `GET /api/v1/actions/history?gameId={gameId}` – action history for game.
+- `GET /api/v1/actions/results?gameId={gameId}&userId={userId}&phase={DAY|NIGHT}` – resolved outcomes for a player/phase.
+- `POST /api/v1/announcements` – broadcast message for a game. DTO:
+  ```json
+  {
+    "gameId": "game456",
+    "message": "A player has been eliminated!",
+    "visibleTo": ["ALL"],
+    "phase": "NIGHT"
+  }
+  ```
 
 ## User Management Service
 

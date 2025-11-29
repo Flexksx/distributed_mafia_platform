@@ -40,8 +40,11 @@
 [submodule "message_broker"]
 	path = message_broker
 	url = https://github.com/ceban-vasile/mafia_message_broker.git
+<<<<<<< HEAD
+=======
 [submodule "services/town-service"]
 	path = town-service
 [submodule "town-service"]
 	path = town-service
 	url = https://github.com/LiviuTofan/town-service
+>>>>>>> origin/main
