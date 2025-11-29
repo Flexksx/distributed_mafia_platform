@@ -121,13 +121,14 @@ services:
 
   # PostgreSQL for Shop Service
   shop-service-db:
-    image: cebanvasile1/shop-service-db:latest
+    image: cebanvasile1/shop-service-db:1.0.2-grpc
     platform: linux/amd64
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${SHOP_SERVICE_POSTGRES_USER}
       POSTGRES_PASSWORD: ${SHOP_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${SHOP_SERVICE_POSTGRES_DB}
+      MESSAGE_BROKER_URL: http://message-broker:${MESSAGE_BROKER_PORT}
     volumes:
       - shop_service_data:/var/lib/postgresql/data
     healthcheck:
