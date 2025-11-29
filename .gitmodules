@@ -28,9 +28,6 @@
 [submodule "task-service"]
 	path = task-service
 	url = git@github.com:XRRRA/task-service.git
-[submodule "services/town-service"]
-	path = services/town-service
-	url = https://github.com/LiviuTofan/town-service
 [submodule "mafia_api_gateway"]
 	path = mafia_api_gateway
 	url = git@github.com:Flexksx/mafia_api_gateway.git
@@ -43,3 +40,8 @@
 [submodule "message_broker"]
 	path = message_broker
 	url = https://github.com/ceban-vasile/mafia_message_broker.git
+[submodule "services/town-service"]
+	path = town-service
+[submodule "town-service"]
+	path = town-service
+	url = https://github.com/LiviuTofan/town-service
