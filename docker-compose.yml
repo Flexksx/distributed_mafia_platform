@@ -525,6 +525,7 @@ services:
   # SERVICE DISCOVERY
   # ================
   service-discovery:
+    build: ./mafia_service_discovery # Build locally for testing
     image: flexksx/mafia_service_discovery:latest
     platform: linux/amd64
     restart: unless-stopped
