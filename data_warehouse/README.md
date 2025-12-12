@@ -8,6 +8,8 @@ This module provides a centralized data warehouse for analytics and reporting ac
 ┌─────────────────┐    ┌─────────────────┐
 │  User Service   │    │  Game Service   │
 │   PostgreSQL    │    │   PostgreSQL    │
+│(user-management │    │ (game-service   │
+│      -db)       │    │      -db)       │
 └────────┬────────┘    └────────┬────────┘
          │                      │
          │     ┌────────────┐   │
@@ -20,6 +22,7 @@ This module provides a centralized data warehouse for analytics and reporting ac
          │   Data Warehouse      │
          │     PostgreSQL        │
          │  (Star Schema)        │
+         │  Port: 5440           │
          └───────────────────────┘
 ```
 
@@ -30,6 +33,26 @@ This module provides a centralized data warehouse for analytics and reporting ac
 - **Scheduled Sync**: Runs every 5 minutes by default
 - **Full Load**: Daily full sync at 2 AM UTC
 - **ETL Logging**: Tracks all ETL runs for monitoring
+
+## Integration with Root Docker Compose
+
+The data warehouse is integrated into the main `docker-compose.yml` in the project root. It will automatically:
+1. Start a PostgreSQL database for the warehouse (port 5440)
+2. Start the ETL service that syncs data from User and Game services
+3. Wait for source databases to be healthy before starting ETL
+
+### Start with the Platform
+
+```bash
+# From the project root
+docker compose up -d data-warehouse-db etl-service
+```
+
+### View ETL Logs
+
+```bash
+docker compose logs -f etl-service
+```
 
 ## Schema Overview
 
@@ -48,36 +71,38 @@ This module provides a centralized data warehouse for analytics and reporting ac
 
 ## Usage
 
-### Start the Data Warehouse
-
-```bash
-cd data_warehouse
-docker-compose up -d
-```
-
 ### Run Manual ETL
 
 ```bash
-# Full load
-docker-compose exec etl-service python etl_pipeline.py --all --full-load
+# Full load (all sources)
+docker compose exec etl-service python etl_pipeline.py --all --full-load
 
 # Incremental load
-docker-compose exec etl-service python etl_pipeline.py --all
+docker compose exec etl-service python etl_pipeline.py --all
 
-# Specific source
-docker-compose exec etl-service python etl_pipeline.py --source user_service
+# Specific source only
+docker compose exec etl-service python etl_pipeline.py --source user_service
+docker compose exec etl-service python etl_pipeline.py --source game_service
 ```
 
 ### Query the Warehouse
 
 ```bash
-docker-compose exec data-warehouse-db psql -U warehouse -d mafia_warehouse
+# Connect to the warehouse database
+docker compose exec data-warehouse-db psql -U warehouse -d mafia_warehouse
 ```
 
 Example queries:
 
 ```sql
--- Total games by lobby
+-- Check ETL run history
+SELECT * FROM etl_run_log ORDER BY run_start_time DESC LIMIT 10;
+
+-- Count users synced
+SELECT COUNT(*) FROM dim_users;
+
+-- Count lobbies synced
+SELECT COUNT(*) FROM dim_lobbies;
 SELECT l.lobby_name, COUNT(g.game_id) as total_games
 FROM fact_games g
 JOIN dim_lobbies l ON g.lobby_id = l.lobby_id

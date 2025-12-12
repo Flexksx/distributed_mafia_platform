@@ -14,7 +14,7 @@ services:
       - warehouse_data:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U warehouse"]
+      test: ["CMD-SHELL", "pg_isready -U warehouse -d mafia_warehouse"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -38,19 +38,19 @@ services:
       WAREHOUSE_DB_USER: warehouse
       WAREHOUSE_DB_PASSWORD: warehouse
 
-      # User Service source connection
-      USER_SERVICE_DB_HOST: ${USER_SERVICE_DB_HOST:-user-db-primary}
-      USER_SERVICE_DB_PORT: ${USER_SERVICE_DB_PORT:-5432}
-      USER_SERVICE_DB_NAME: ${USER_SERVICE_DB_NAME:-mafia_users}
-      USER_SERVICE_DB_USER: ${USER_SERVICE_DB_USER:-postgres}
-      USER_SERVICE_DB_PASSWORD: ${USER_SERVICE_DB_PASSWORD:-postgres}
+      # User Service source connection (matches root docker-compose)
+      USER_SERVICE_DB_HOST: user-management-db
+      USER_SERVICE_DB_PORT: 5432
+      USER_SERVICE_DB_NAME: ${USER_SERVICE_POSTGRES_DB:-mafia_users}
+      USER_SERVICE_DB_USER: ${USER_SERVICE_POSTGRES_USER:-mafia_user}
+      USER_SERVICE_DB_PASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD:-mafia_secure_password}
 
-      # Game Service source connection
-      GAME_SERVICE_DB_HOST: ${GAME_SERVICE_DB_HOST:-game-db-primary}
-      GAME_SERVICE_DB_PORT: ${GAME_SERVICE_DB_PORT:-5432}
-      GAME_SERVICE_DB_NAME: ${GAME_SERVICE_DB_NAME:-mafia}
-      GAME_SERVICE_DB_USER: ${GAME_SERVICE_DB_USER:-app}
-      GAME_SERVICE_DB_PASSWORD: ${GAME_SERVICE_DB_PASSWORD:-app}
+      # Game Service source connection (matches root docker-compose)
+      GAME_SERVICE_DB_HOST: game-service-db
+      GAME_SERVICE_DB_PORT: 5432
+      GAME_SERVICE_DB_NAME: ${GAME_SERVICE_POSTGRES_DB:-mafia_game}
+      GAME_SERVICE_DB_USER: ${GAME_SERVICE_POSTGRES_USER:-mafia_game_user}
+      GAME_SERVICE_DB_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD:-mafia_game_secure_password}
 
       # ETL scheduling
       ETL_INTERVAL_MINUTES: ${ETL_INTERVAL_MINUTES:-5}

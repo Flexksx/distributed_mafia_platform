@@ -26,13 +26,16 @@ from typing import Dict, List, Optional, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_batch
 
-# Configure logging
+# Configure logging - create log directory if it doesn't exist
+LOG_DIR = "/var/log/etl"
+os.makedirs(LOG_DIR, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("/var/log/etl/etl_pipeline.log", mode="a"),
+        logging.FileHandler(os.path.join(LOG_DIR, "etl_pipeline.log"), mode="a"),
     ],
 )
 logger = logging.getLogger("ETL")
@@ -40,18 +43,18 @@ logger = logging.getLogger("ETL")
 # Database connection configurations
 DB_CONFIGS = {
     "user_service": {
-        "host": os.getenv("USER_SERVICE_DB_HOST", "user-db-primary"),
+        "host": os.getenv("USER_SERVICE_DB_HOST", "user-management-db"),
         "port": int(os.getenv("USER_SERVICE_DB_PORT", 5432)),
         "database": os.getenv("USER_SERVICE_DB_NAME", "mafia_users"),
-        "user": os.getenv("USER_SERVICE_DB_USER", "postgres"),
-        "password": os.getenv("USER_SERVICE_DB_PASSWORD", "postgres"),
+        "user": os.getenv("USER_SERVICE_DB_USER", "mafia_user"),
+        "password": os.getenv("USER_SERVICE_DB_PASSWORD", "mafia_secure_password"),
     },
     "game_service": {
-        "host": os.getenv("GAME_SERVICE_DB_HOST", "game-db-primary"),
+        "host": os.getenv("GAME_SERVICE_DB_HOST", "game-service-db"),
         "port": int(os.getenv("GAME_SERVICE_DB_PORT", 5432)),
-        "database": os.getenv("GAME_SERVICE_DB_NAME", "mafia"),
-        "user": os.getenv("GAME_SERVICE_DB_USER", "app"),
-        "password": os.getenv("GAME_SERVICE_DB_PASSWORD", "app"),
+        "database": os.getenv("GAME_SERVICE_DB_NAME", "mafia_game"),
+        "user": os.getenv("GAME_SERVICE_DB_USER", "mafia_game_user"),
+        "password": os.getenv("GAME_SERVICE_DB_PASSWORD", "mafia_game_secure_password"),
     },
     "warehouse": {
         "host": os.getenv("WAREHOUSE_DB_HOST", "data-warehouse-db"),
