@@ -1,0 +1,69 @@
+services:
+  # Data Warehouse PostgreSQL
+  data-warehouse-db:
+    image: postgres:16
+    container_name: data-warehouse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: warehouse
+      POSTGRES_PASSWORD: warehouse
+      POSTGRES_DB: mafia_warehouse
+    ports:
+      - "5440:5432"
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U warehouse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - mafia-network
+
+  # ETL Service
+  etl-service:
+    build:
+      context: .
+    container_name: etl-service
+    restart: unless-stopped
+    depends_on:
+      data-warehouse-db:
+        condition: service_healthy
+    environment:
+      # Warehouse connection
+      WAREHOUSE_DB_HOST: data-warehouse-db
+      WAREHOUSE_DB_PORT: 5432
+      WAREHOUSE_DB_NAME: mafia_warehouse
+      WAREHOUSE_DB_USER: warehouse
+      WAREHOUSE_DB_PASSWORD: warehouse
+
+      # User Service source connection
+      USER_SERVICE_DB_HOST: ${USER_SERVICE_DB_HOST:-user-db-primary}
+      USER_SERVICE_DB_PORT: ${USER_SERVICE_DB_PORT:-5432}
+      USER_SERVICE_DB_NAME: ${USER_SERVICE_DB_NAME:-mafia_users}
+      USER_SERVICE_DB_USER: ${USER_SERVICE_DB_USER:-postgres}
+      USER_SERVICE_DB_PASSWORD: ${USER_SERVICE_DB_PASSWORD:-postgres}
+
+      # Game Service source connection
+      GAME_SERVICE_DB_HOST: ${GAME_SERVICE_DB_HOST:-game-db-primary}
+      GAME_SERVICE_DB_PORT: ${GAME_SERVICE_DB_PORT:-5432}
+      GAME_SERVICE_DB_NAME: ${GAME_SERVICE_DB_NAME:-mafia}
+      GAME_SERVICE_DB_USER: ${GAME_SERVICE_DB_USER:-app}
+      GAME_SERVICE_DB_PASSWORD: ${GAME_SERVICE_DB_PASSWORD:-app}
+
+      # ETL scheduling
+      ETL_INTERVAL_MINUTES: ${ETL_INTERVAL_MINUTES:-5}
+      ETL_FULL_LOAD_HOUR: ${ETL_FULL_LOAD_HOUR:-2}
+    volumes:
+      - etl_logs:/var/log/etl
+    networks:
+      - mafia-network
+
+volumes:
+  warehouse_data:
+  etl_logs:
+
+networks:
+  mafia-network:
+    external: true

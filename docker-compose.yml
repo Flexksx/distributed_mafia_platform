@@ -39,7 +39,7 @@ services:
     networks:
       - mafia-network
 
-  # PostgreSQL for User Management Service
+  # PostgreSQL for User Management Service - Primary
   user-management-db:
     image: postgres:16
     platform: linux/amd64
@@ -48,8 +48,18 @@ services:
       POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
       POSTGRES_PASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${USER_SERVICE_POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+      -c hot_standby=on
+      -c hba_file=/etc/postgresql/pg_hba.conf
     volumes:
       - user_management_data:/var/lib/postgresql/data
+      - ./mafia_user_management_service/replication/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
+      - ./mafia_user_management_service/replication/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -58,7 +68,71 @@ services:
     networks:
       - mafia-network
 
-  # PostgreSQL for Game Service
+  # PostgreSQL for User Management Service - Replica 1
+  user-management-db-replica-1:
+    image: postgres:16
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${USER_SERVICE_POSTGRES_DB}
+      PGUSER: ${USER_SERVICE_POSTGRES_USER}
+      PGPASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+      PRIMARY_HOST: user-management-db
+      PRIMARY_PORT: "5432"
+      REPLICA_SLOT: user_replica_1_slot
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:-replicator_password}
+    entrypoint: ["/bin/bash", "/scripts/start-replica.sh"]
+    volumes:
+      - user_management_replica1_data:/var/lib/postgresql/data
+      - ./mafia_user_management_service/scripts/start-replica.sh:/scripts/start-replica.sh:ro
+    depends_on:
+      user-management-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - mafia-network
+
+  # PostgreSQL for User Management Service - Replica 2
+  user-management-db-replica-2:
+    image: postgres:16
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${USER_SERVICE_POSTGRES_DB}
+      PGUSER: ${USER_SERVICE_POSTGRES_USER}
+      PGPASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+      PRIMARY_HOST: user-management-db
+      PRIMARY_PORT: "5432"
+      REPLICA_SLOT: user_replica_2_slot
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:-replicator_password}
+    entrypoint: ["/bin/bash", "/scripts/start-replica.sh"]
+    volumes:
+      - user_management_replica2_data:/var/lib/postgresql/data
+      - ./mafia_user_management_service/scripts/start-replica.sh:/scripts/start-replica.sh:ro
+    depends_on:
+      user-management-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - mafia-network
+
+  # PostgreSQL for Game Service - Primary
   game-service-db:
     image: postgres:16
     platform: linux/amd64
@@ -67,13 +141,87 @@ services:
       POSTGRES_USER: ${GAME_SERVICE_POSTGRES_USER}
       POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+      -c hot_standby=on
+      -c hba_file=/etc/postgresql/pg_hba.conf
     volumes:
       - game_service_data:/var/lib/postgresql/data
+      - ./mafia_game_service/replication/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
+      - ./mafia_game_service/replication/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - mafia-network
+
+  # PostgreSQL for Game Service - Replica 1
+  game-service-db-replica-1:
+    image: postgres:16
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${GAME_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
+      PGUSER: ${GAME_SERVICE_POSTGRES_USER}
+      PGPASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+      PRIMARY_HOST: game-service-db
+      PRIMARY_PORT: "5432"
+      REPLICA_SLOT: game_replica_1_slot
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:-replicator_password}
+    entrypoint: ["/bin/bash", "/scripts/start-replica.sh"]
+    volumes:
+      - game_service_replica1_data:/var/lib/postgresql/data
+      - ./mafia_game_service/scripts/start-replica.sh:/scripts/start-replica.sh:ro
+    depends_on:
+      game-service-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - mafia-network
+
+  # PostgreSQL for Game Service - Replica 2
+  game-service-db-replica-2:
+    image: postgres:16
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${GAME_SERVICE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
+      PGUSER: ${GAME_SERVICE_POSTGRES_USER}
+      PGPASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+      PRIMARY_HOST: game-service-db
+      PRIMARY_PORT: "5432"
+      REPLICA_SLOT: game_replica_2_slot
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:-replicator_password}
+    entrypoint: ["/bin/bash", "/scripts/start-replica.sh"]
+    volumes:
+      - game_service_replica2_data:/var/lib/postgresql/data
+      - ./mafia_game_service/scripts/start-replica.sh:/scripts/start-replica.sh:ro
+    depends_on:
+      game-service-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - mafia-network
 
@@ -121,7 +269,7 @@ services:
 
   # PostgreSQL for Shop Service
   shop-service-db:
-    image: cebanvasile1/shop-service-db:1.0.2-grpc
+    image: cebanvasile1/shop-service-db:latest
     platform: linux/amd64
     restart: unless-stopped
     environment:
@@ -245,6 +393,10 @@ services:
 
   # User Management Service (Express.js + TypeScript)
   user-management-service:
+    build:
+      context: ./mafia_user_management_service
+      dockerfile: Dockerfile
+      target: production
     image: flexksx/mafia_user_management_service:latest
     platform: linux/amd64
     restart: unless-stopped
@@ -282,6 +434,10 @@ services:
 
   # Game Service (Express.js + TypeScript)
   game-service:
+    build:
+      context: ./mafia_game_service
+      dockerfile: Dockerfile
+      target: production
     image: flexksx/mafia-game-service:latest
     platform: linux/amd64
     restart: unless-stopped
@@ -409,7 +565,7 @@ services:
 
     # Shop Service (Spring Boot + Java) - Instance 1
   shop-service:
-    image: cebanvasile1/shop-service:2.0.6
+    image: cebanvasile1/shop-service:1.0.2-grpc
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
@@ -558,7 +714,7 @@ services:
   # MESSAGE BROKER
   # ==============
   message-broker:
-    build: ./message_broker # Build our modified version locally
+    build: ./message_broker
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
@@ -686,7 +842,15 @@ services:
 volumes:
   user_management_data:
     driver: local
+  user_management_replica1_data:
+    driver: local
+  user_management_replica2_data:
+    driver: local
   game_service_data:
+    driver: local
+  game_service_replica1_data:
+    driver: local
+  game_service_replica2_data:
     driver: local
   task_service_data:
     driver: local
