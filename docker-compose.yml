@@ -405,11 +405,17 @@ services:
     depends_on:
       user-management-db:
         condition: service_healthy
+      user-management-db-replica-1:
+        condition: service_healthy
+      user-management-db-replica-2:
+        condition: service_healthy
     environment:
       PORT: ${USER_SERVICE_PORT}
       GRPC_PORT: ${USER_SERVICE_GRPC_PORT}
       NODE_ENV: production
       DATABASE_URL: postgresql://${USER_SERVICE_POSTGRES_USER}:${USER_SERVICE_POSTGRES_PASSWORD}@user-management-db:${USER_SERVICE_POSTGRES_PORT}/${USER_SERVICE_POSTGRES_DB}?schema=public
+      DATABASE_REPLICA_1_URL: postgresql://${USER_SERVICE_POSTGRES_USER}:${USER_SERVICE_POSTGRES_PASSWORD}@user-management-db-replica-1:${USER_SERVICE_POSTGRES_PORT}/${USER_SERVICE_POSTGRES_DB}?schema=public
+      DATABASE_REPLICA_2_URL: postgresql://${USER_SERVICE_POSTGRES_USER}:${USER_SERVICE_POSTGRES_PASSWORD}@user-management-db-replica-2:${USER_SERVICE_POSTGRES_PORT}/${USER_SERVICE_POSTGRES_DB}?schema=public
       POSTGRES_USER: ${USER_SERVICE_POSTGRES_USER}
       POSTGRES_PASSWORD: ${USER_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${USER_SERVICE_POSTGRES_DB}
@@ -446,6 +452,10 @@ services:
     depends_on:
       game-service-db:
         condition: service_healthy
+      game-service-db-replica-1:
+        condition: service_healthy
+      game-service-db-replica-2:
+        condition: service_healthy
       user-management-service:
         condition: service_healthy
     environment:
@@ -454,6 +464,8 @@ services:
       NODE_ENV: production
       USER_SERVICE_URL: http://user-management-service:${USER_SERVICE_PORT}
       DATABASE_URL: postgresql://${GAME_SERVICE_POSTGRES_USER}:${GAME_SERVICE_POSTGRES_PASSWORD}@game-service-db:${GAME_SERVICE_POSTGRES_PORT}/${GAME_SERVICE_POSTGRES_DB}?schema=public
+      DATABASE_REPLICA_1_URL: postgresql://${GAME_SERVICE_POSTGRES_USER}:${GAME_SERVICE_POSTGRES_PASSWORD}@game-service-db-replica-1:${GAME_SERVICE_POSTGRES_PORT}/${GAME_SERVICE_POSTGRES_DB}?schema=public
+      DATABASE_REPLICA_2_URL: postgresql://${GAME_SERVICE_POSTGRES_USER}:${GAME_SERVICE_POSTGRES_PASSWORD}@game-service-db-replica-2:${GAME_SERVICE_POSTGRES_PORT}/${GAME_SERVICE_POSTGRES_DB}?schema=public
       POSTGRES_USER: ${GAME_SERVICE_POSTGRES_USER}
       POSTGRES_PASSWORD: ${GAME_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${GAME_SERVICE_POSTGRES_DB}
