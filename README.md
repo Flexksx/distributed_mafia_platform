@@ -23,9 +23,9 @@ Together, these services compose a cohesive ecosystem where independent scaling,
 ## Platform Architecture (May 2025)
 
 ```mermaid
-flowchart LR
+flowchart TB
     Clients -->|REST/JSON| Gateway
-    Gateway -->|auth + cache| RedisCache
+    Gateway -->|consistent hash| RedisShards
     Gateway -->|commands/events| MessageBroker
     MessageBroker -->|gRPC| UserService
     MessageBroker -->|gRPC| GameService
@@ -47,23 +47,55 @@ flowchart LR
     ServiceDiscovery --> CharacterService
     ServiceDiscovery --> TownService
 
-    subgraph Observability
+    subgraph RedisShards["Redis Cache (Sharded)"]
+        Redis0[redis-shard-0]
+        Redis1[redis-shard-1]
+        Redis2[redis-shard-2]
+    end
+
+    subgraph Observability["Monitoring Stack"]
         Prometheus --> Grafana
+        Prometheus -->|scrape| UserService
+        Prometheus -->|scrape| GameService
+        Prometheus -->|scrape| MessageBroker
+        Prometheus -->|scrape| Gateway
     end
 
     subgraph Storage["Per-service storage"]
-        PG1[(Postgres: user)]
-        PG2[(Postgres: game)]
-        PG3[(Postgres: tasks)]
-        PG4[(Postgres: voting)]
-        PG5[(Postgres: shop)]
-        PG6[(Postgres: roleplay)]
-        PG7[(Postgres: character)]
-        PG8[(Postgres: town)]
+        PG1[(user-management-db<br/>Primary)]
+        PG1R1[(user-management-db<br/>Replica 1)]
+        PG1R2[(user-management-db<br/>Replica 2)]
+        PG2[(game-service-db<br/>Primary)]
+        PG2R1[(game-service-db<br/>Replica 1)]
+        PG2R2[(game-service-db<br/>Replica 2)]
+        PG3[(task-service-db)]
+        PG4[(voting-service-db)]
+        PG5[(shop-service-db)]
+        PG6[(roleplay-service-db)]
+        PG7[(character-service-db)]
+        PG8[(town-service-db)]
+    end
+
+    subgraph DataWarehouse["Data Warehouse & ETL"]
+        ETLService[ETL Service]
+        WarehouseDB[(data-warehouse-db)]
+        ETLService -->|extract| PG1
+        ETLService -->|extract| PG2
+        ETLService -->|load| WarehouseDB
     end
 
     UserService --> PG1
+    UserService -.->|read replicas| PG1R1
+    UserService -.->|read replicas| PG1R2
+    PG1 -->|replication| PG1R1
+    PG1 -->|replication| PG1R2
+    
     GameService --> PG2
+    GameService -.->|read replicas| PG2R1
+    GameService -.->|read replicas| PG2R2
+    PG2 -->|replication| PG2R1
+    PG2 -->|replication| PG2R2
+    
     TaskService --> PG3
     VotingService --> PG4
     ShopService --> PG5
