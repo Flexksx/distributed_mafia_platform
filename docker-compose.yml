@@ -235,7 +235,7 @@ services:
       POSTGRES_PASSWORD: ${TASK_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${TASK_SERVICE_POSTGRES_DB}
     ports:
-      - "5001:5432"
+      - "${TASK_SERVICE_DB_PORT:-5001}:5432"
     volumes:
       - task_service_data:/var/lib/postgresql/data
     healthcheck:
@@ -256,7 +256,7 @@ services:
       POSTGRES_PASSWORD: ${VOTING_SERVICE_POSTGRES_PASSWORD}
       POSTGRES_DB: ${VOTING_SERVICE_POSTGRES_DB}
     ports:
-      - "5002:5432"
+      - "${VOTING_SERVICE_DB_PORT:-5002}:5432"
     volumes:
       - voting_service_data:/var/lib/postgresql/data
     healthcheck:
@@ -311,20 +311,57 @@ services:
   # APPLICATION SERVICES
   # =================================================================
 
-  # Redis Cache for Gateway
-  gateway-cache:
+  # Redis Shards for Consistent Hashing (Grade 2)
+  redis-shard-0:
     image: redis:7-alpine
     platform: linux/amd64
+    container_name: redis-shard-0
     restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
-      - "6379:6379" # Expose Redis to localhost
+      - "${REDIS_SHARD_0_PORT:-6379}:6379"
     volumes:
-      - gateway_cache_data:/data
+      - redis_shard_0_data:/data
+    command: redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mafia-network
+
+  redis-shard-1:
+    image: redis:7-alpine
+    platform: linux/amd64
+    container_name: redis-shard-1
+    restart: unless-stopped
+    ports:
+      - "${REDIS_SHARD_1_PORT:-6380}:6379"
+    volumes:
+      - redis_shard_1_data:/data
+    command: redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mafia-network
+
+  redis-shard-2:
+    image: redis:7-alpine
+    platform: linux/amd64
+    container_name: redis-shard-2
+    restart: unless-stopped
+    ports:
+      - "${REDIS_SHARD_2_PORT:-6381}:6379"
+    volumes:
+      - redis_shard_2_data:/data
+    command: redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
     networks:
       - mafia-network
@@ -645,11 +682,17 @@ services:
   # GATEWAY
   # =====
   gateway:
-    image: flexksx/mafia_api_gateway:main
+    build:
+      context: ./mafia_api_gateway
+      dockerfile: Dockerfile
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
-      gateway-cache:
+      redis-shard-0:
+        condition: service_healthy
+      redis-shard-1:
+        condition: service_healthy
+      redis-shard-2:
         condition: service_healthy
       message-broker:
         condition: service_healthy
@@ -667,10 +710,19 @@ services:
       JWT_ALGORITHM: ${GATEWAY_JWT_ALGORITHM}
       JWT_EXPIRES_SECONDS: ${GATEWAY_JWT_EXPIRES_SECONDS}
       SERVICE_TO_SERVICE_SECRET: ${GATEWAY_SERVICE_TO_SERVICE_SECRET}
-      REDIS_HOST: gateway-cache
-      REDIS_PORT: 6379
+
+      # Redis Sharding Configuration (Consistent Hashing)
+      REDIS_SHARDING_ENABLED: "true"
+      REDIS_NODES: "redis-shard-0:6379,redis-shard-1:6379,redis-shard-2:6379"
+      REDIS_VIRTUAL_NODES: "150"
       REDIS_DB: 0
+      REDIS_TTL_SECONDS: ${GATEWAY_CACHE_TTL_SECONDS}
       CACHE_TTL_SECONDS: ${GATEWAY_CACHE_TTL_SECONDS}
+
+      # Legacy single Redis config (fallback)
+      REDIS_HOST: redis-shard-0
+      REDIS_PORT: 6379
+
       HTTP_TIMEOUT_SECONDS: "5"
       MAX_CONCURRENCY: "200"
       SERVICE_DISCOVERY_URL: http://service-discovery:${SERVICE_DISCOVERY_PORT}
@@ -730,12 +782,12 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
-      gateway-cache:
+      redis-shard-0:
         condition: service_healthy
       service-discovery:
         condition: service_healthy
     ports:
-      - "8002:8002"
+      - "${MESSAGE_BROKER_PORT:-8002}:8002"
     environment:
       # Broker Configuration
       BROKER_HOST: 0.0.0.0
@@ -743,7 +795,7 @@ services:
       BROKER_NAME: message-broker
 
       # Redis Configuration (reuse gateway cache)
-      REDIS_HOST: gateway-cache
+      REDIS_HOST: redis-shard-0
       REDIS_PORT: 6379
       REDIS_DB: 1
       REDIS_PASSWORD: ""
@@ -861,7 +913,7 @@ services:
       POSTGRES_PASSWORD: warehouse
       POSTGRES_DB: mafia_warehouse
     ports:
-      - "5440:5432"
+      - "${DATA_WAREHOUSE_DB_PORT:-5440}:5432"
     volumes:
       - warehouse_data:/var/lib/postgresql/data
       - ./data_warehouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
@@ -945,7 +997,11 @@ volumes:
     driver: local
   town_service_data:
     driver: local
-  gateway_cache_data:
+  redis_shard_0_data:
+    driver: local
+  redis_shard_1_data:
+    driver: local
+  redis_shard_2_data:
     driver: local
   prometheus_data:
     driver: local

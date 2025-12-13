@@ -5,7 +5,7 @@ The Mafia Game Platform now runs as a service-discovered mesh behind a slim API 
 Active services in the 2025 compose stack:
 
 * **API Gateway** – Entry point for clients; enforces auth and caches responses in Redis. No business routes exposed for internal-only traffic.
-* **Message Broker** – HTTP ingress + gRPC delivery for service-to-service commands and events. Owns LB, circuit breaking, DLQ, and 2PC.
+* **Message Broker** – HTTP ingress + gRPC delivery for service-to-service commands and events. Owns LB, circuit breaking, DLQ, 2PC, and Saga pattern for long-running distributed transactions.
 * **Service Discovery** – Tracks service heartbeats, load, and health, and returns routable instances to the gateway.
 * **User Management Service** – Single source of truth for player identity and in‑game currency.
 * **Game Service** – Orchestrates lobbies, player state, and day/night cycles.
@@ -77,7 +77,7 @@ flowchart LR
 | Service | Port (env-driven) | Data store | Notes |
 | --- | --- | --- | --- |
 | API Gateway | `${GATEWAY_PORT}` | Redis edge cache `gateway-cache` | Auth + caching only; all S2S flows use Message Broker |
-| Message Broker | `3005/8002 (HTTP)` `50051 (gRPC)` | Redis + SQLite | LB, circuit breaker, DLQ, 2PC, topic + per-subscriber queues |
+| Message Broker | `3005/8002 (HTTP)` `50051 (gRPC)` | Redis + SQLite | LB, circuit breaker, DLQ, 2PC, Saga orchestration (saga_transactions, saga_steps tables), topic + per-subscriber queues |
 | Service Discovery | `${SERVICE_DISCOVERY_PORT}` | In-memory registry | Health checks + load reporting |
 | User Management | `${USER_SERVICE_PORT}` | Postgres `user-management-db` | Identity + currency |
 | Game Service | `${GAME_SERVICE_PORT}` | Postgres `game-service-db` | Lobbies + cycles |
@@ -143,6 +143,225 @@ All services register with Service Discovery and include their subscribed topics
   }
   ```
 - `GET /api/v1/2pc/transaction/{transaction_id}/status`
+
+**Saga Pattern (long-running distributed transactions with compensation)**
+- `POST /api/v1/saga/start` – Start a new saga transaction
+  ```json
+  {
+    "saga_type": "create_lobby_with_user",
+    "initiator_service": "api-gateway",
+    "payload": {
+      "user_id": "user-123",
+      "lobby_name": "My Lobby",
+      "max_players": 10
+    },
+    "steps": [
+      {
+        "name": "validate_user",
+        "service": "user-management-service",
+        "action": "GET /api/v1/users/{userId}",
+        "compensation_action": null,
+        "payload": { "userId": "user-123" },
+        "timeout_seconds": 30
+      },
+      {
+        "name": "create_lobby",
+        "service": "game-service",
+        "action": "POST /api/v1/lobbies",
+        "compensation_action": "DELETE /api/v1/lobbies/{lobbyId}",
+        "payload": { "name": "My Lobby", "max_players": 10 },
+        "timeout_seconds": 30
+      }
+    ]
+  }
+  ```
+- `POST /api/v1/saga/{saga_id}/execute-next` – Execute the next pending step
+- `POST /api/v1/saga/{saga_id}/step-complete` – Report step completion (success/failure)
+  ```json
+  {
+    "step_name": "create_lobby",
+    "success": true,
+    "result": { "lobby_id": "lobby-456", "status": "created" },
+    "error_message": null
+  }
+  ```
+- `POST /api/v1/saga/{saga_id}/compensate` – Manually trigger compensation
+- `GET /api/v1/saga/{saga_id}` – Get saga status
+- `GET /api/v1/sagas?state=EXECUTING&saga_type=create_lobby_with_user&limit=50` – List sagas with filters
+- `POST /api/v1/saga/execute` – Execute saga with automatic orchestration (all steps)
+- `POST /api/v1/sagas/recover` – Recover incomplete sagas after restart
+
+### Saga Pattern DTOs
+
+**Saga Step Definition**
+```typescript
+interface SagaStepDefinition {
+  name: string;                    // Step name (e.g., "validate_user", "create_lobby")
+  service: string;                  // Target service name
+  action: string;                   // Action path/method (e.g., "POST /api/v1/lobbies")
+  compensation_action: string;      // Compensation action for rollback (e.g., "DELETE /api/v1/lobbies/{lobbyId}")
+  payload?: Record<string, any>;    // Step-specific payload (optional)
+  timeout_seconds?: number;        // Step timeout in seconds (default: 30)
+}
+```
+
+**Start Saga Request**
+```typescript
+interface StartSagaRequest {
+  saga_type: string;                // Type of saga (e.g., "create_lobby_with_user")
+  initiator_service: string;        // Service that initiated the saga
+  payload: Record<string, any>;     // Global saga payload data
+  steps: SagaStepDefinition[];      // Ordered list of saga steps
+}
+```
+
+**Saga Step Result Request**
+```typescript
+interface SagaStepResultRequest {
+  step_name: string;                 // Name of the completed step
+  success: boolean;                 // Whether the step succeeded
+  result?: Record<string, any>;     // Step result data (if successful)
+  error_message?: string;           // Error message (if failed)
+}
+```
+
+**Saga Response**
+```typescript
+interface SagaResponse {
+  saga_id: string;                   // Unique saga identifier
+  saga_type: string;                // Type of saga
+  state: SagaState;                  // Current saga state
+  current_step_index: number;       // Index of current step
+  steps: SagaStepResponse[];         // List of all steps with their states
+  payload: Record<string, any>;      // Saga payload
+  created_at: string;                // ISO timestamp
+  updated_at: string;                // ISO timestamp
+  completed_at?: string;             // ISO timestamp (if completed)
+  error_message?: string;            // Error message (if failed)
+}
+
+enum SagaState {
+  PENDING = "PENDING",               // Not started
+  EXECUTING = "EXECUTING",           // Currently executing a step
+  STEP_COMPLETED = "STEP_COMPLETED", // Step completed, ready for next
+  COMPLETED = "COMPLETED",           // All steps successful
+  STEP_FAILED = "STEP_FAILED",       // Step failed, compensation needed
+  COMPENSATING = "COMPENSATING",     // Running compensations
+  COMPENSATED = "COMPENSATED",       // All compensations done
+  FAILED = "FAILED"                  // Failed without recovery
+}
+```
+
+**Saga Step Response**
+```typescript
+interface SagaStepResponse {
+  name: string;                      // Step name
+  state: SagaStepState;             // Current step state
+  service: string;                  // Target service
+  started_at?: string;               // ISO timestamp
+  completed_at?: string;             // ISO timestamp
+  result?: Record<string, any>;      // Step result data
+  error_message?: string;            // Error message (if failed)
+}
+
+enum SagaStepState {
+  PENDING = "PENDING",               // Not started
+  EXECUTING = "EXECUTING",           // Currently running
+  COMPLETED = "COMPLETED",           // Successfully completed
+  FAILED = "FAILED",                 // Failed to execute
+  COMPENSATING = "COMPENSATING",     // Running compensation
+  COMPENSATED = "COMPENSATED",       // Compensation complete
+  COMPENSATION_FAILED = "COMPENSATION_FAILED" // Compensation also failed
+}
+```
+
+**Saga List Response**
+```typescript
+interface SagaListResponse {
+  sagas: SagaResponse[];            // List of saga transactions
+  total: number;                    // Total count
+}
+```
+
+### Saga Pattern Architecture
+
+The Saga pattern implements **orchestration-based distributed transactions** for long-running operations across multiple services. Unlike 2PC (Two-Phase Commit), which uses distributed locks and requires all participants to be available simultaneously, the Saga pattern:
+
+1. **Executes steps sequentially** - Each step completes before the next begins
+2. **Uses compensating transactions** - On failure, compensations run in reverse order
+3. **Supports long-running transactions** - No blocking locks, suitable for operations that may take minutes or hours
+4. **Enables crash recovery** - Saga state is persisted, allowing recovery after coordinator restarts
+5. **Provides detailed logging** - Each step's state, result, and timing are tracked
+
+**Key Differences from 2PC:**
+- **2PC**: All-or-nothing commit, blocking, requires all participants available
+- **Saga**: Step-by-step execution, non-blocking, supports compensating transactions
+
+**Example Saga Flow:**
+```
+1. Start Saga: POST /api/v1/saga/start
+   → Creates saga with state=PENDING
+
+2. Execute Step 1: POST /api/v1/saga/{saga_id}/execute-next
+   → Coordinator calls service endpoint
+   → Service processes and reports: POST /api/v1/saga/{saga_id}/step-complete
+   → Saga state updates to STEP_COMPLETED
+
+3. Execute Step 2: POST /api/v1/saga/{saga_id}/execute-next
+   → If step fails, saga state becomes STEP_FAILED
+   → Compensation starts automatically
+
+4. Compensation: POST /api/v1/saga/{saga_id}/compensate
+   → Compensations execute in reverse order (Step 2 → Step 1)
+   → Saga state becomes COMPENSATED
+```
+
+### Saga Database Schema
+
+The Saga pattern uses two main database tables in the Message Broker's SQLite database:
+
+**saga_transactions** - Stores saga transaction records
+```sql
+CREATE TABLE saga_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    saga_id VARCHAR(36) UNIQUE NOT NULL,
+    saga_type VARCHAR(255) NOT NULL,
+    state VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    current_step_index INTEGER DEFAULT 0,
+    initiator_service VARCHAR(255),
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    error_message TEXT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    completed_at DATETIME
+);
+```
+
+**saga_steps** - Stores individual step records for each saga
+```sql
+CREATE TABLE saga_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    saga_id VARCHAR(36) NOT NULL,
+    step_index INTEGER NOT NULL,
+    step_name VARCHAR(255) NOT NULL,
+    service VARCHAR(255) NOT NULL,
+    action VARCHAR(255) NOT NULL,
+    compensation_action VARCHAR(255),
+    state VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    payload_json TEXT,
+    result_json TEXT,
+    error_message TEXT,
+    timeout_seconds INTEGER DEFAULT 30,
+    started_at DATETIME,
+    completed_at DATETIME,
+    FOREIGN KEY (saga_id) REFERENCES saga_transactions(saga_id)
+);
+```
+
+**Indexes:**
+- `saga_id` on both tables for fast lookups
+- `state` on `saga_transactions` for filtering by state
+- `step_index` ordering for sequential step execution
 
 **gRPC delivery contract (services implement)**
 ```protobuf
